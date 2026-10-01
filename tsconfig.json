@@ -1,0 +1,30 @@
+{
+  // Host half: compiled to `lib/` by `tsc` and loaded by DSH under Node.
+  // 宿主端：由 `tsc` 编译到 `lib/`，DSH 在 Node 下加载。
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "target": "ES2022",
+    "lib": ["ES2023"],
+    "types": ["node"],
+
+    "rootDir": "src",
+    "outDir": "lib",
+    "declaration": true,
+    "declarationMap": false,
+    "sourceMap": false,
+
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "forceConsistentCasingInFileNames": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true
+  },
+  // The host half only; the client half has its own project file.
+  // 只含宿主端；客户端另有独立的工程文件。
+  "include": ["src/core.ts", "src/index.ts"],
+  "exclude": ["src/client"]
+}

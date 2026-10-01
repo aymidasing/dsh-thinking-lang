@@ -1,0 +1,14 @@
+# dsh-thinking-lang bundle patch.
+#
+# Registers the host entry: the `thinking-language` settings namespace, the
+# stable system-prompt section, and the per-step context line.
+# 注册宿主入口：`thinking-language` 设置命名空间、稳定的系统提示词段、
+# 以及每一步注入的上下文行。
+#
+# The browser half is discovered automatically through the package's
+# `dsh.client` declaration — the settings section needs no entry here.
+# 浏览器端由包内的 `dsh.client` 声明自动发现，设置页无需在此登记。
+
+- insert:
+    - id: thinking-language
+      name: dsh-thinking-lang

@@ -1,0 +1,26 @@
+{
+  // Client half: type-checked here, bundled by tsdown.
+  // 客户端端：在此做类型检查，打包由 tsdown 完成。
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "target": "ES2022",
+    "lib": ["ES2023", "DOM"],
+
+    // No ambient `@types` here: the browser half may only see what it declares
+    // itself, so a stray Node global cannot slip into the bundle.
+    // 此处不引入任何 `@types`：浏览器端只能看到它自己声明的东西，从而杜绝 Node
+    // 全局变量混进产物。
+    "types": [],
+    "jsx": "react-jsx",
+
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "noEmit": true
+  },
+  // `core.ts` is shared with the host half, so it is checked under both configs.
+  // `core.ts` 与宿主端共用，因此在两套配置下都会被检查。
+  "include": ["src/client/**/*", "src/core.ts"]
+}

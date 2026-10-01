@@ -1,0 +1,6 @@
+# Keep every text file LF — in the repository and on checkout.
+# 文本文件在仓库内与检出时一律使用 LF。
+#
+# Windows 上 git 默认 core.autocrlf=true，会把提交内容转成 CRLF，而 GitHub
+# 上显示为「整个文件都改了」。显式固定成 LF 可以让各平台克隆到的内容一致。
+* text=auto eol=lf

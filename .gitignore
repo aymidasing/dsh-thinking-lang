@@ -1,0 +1,7 @@
+# 构建产物（只忽略仓库根目录下的，别误伤 src/client/）
+/lib/
+/client/
+
+node_modules/
+*.log
+.DS_Store
