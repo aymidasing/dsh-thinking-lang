@@ -3,6 +3,14 @@
   "version": "0.1.0",
   "description": "DSH plugin: set the agent's reasoning language (Settings → General)",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aymidasing/dsh-thinking-lang.git"
+  },
+  "homepage": "https://github.com/aymidasing/dsh-thinking-lang#readme",
+  "bugs": {
+    "url": "https://github.com/aymidasing/dsh-thinking-lang/issues"
+  },
   "keywords": [
     "deepseek",
     "harness",
@@ -57,16 +65,16 @@
       "immediately": true
     }
   },
-  "dependencies": {
-    "@deepseek-ai/schemastery": "^3.18.1"
-  },
   "devDependencies": {
+    "@deepseek-ai/schemastery": "^3.18.1",
     "@types/node": "^24.0.0",
     "tsdown": "^0.22.14",
     "typescript": "^5.9.0"
   },
   "peerDependencies": {
-    "@deepseek-ai/dsh-client-ui-primitives": ">=0.1.0-rc.5"
+    "@deepseek-ai/dsh-client-ui-primitives": ">=0.1.0-rc.5",
+    "@deepseek-ai/schemastery": "^3.18.1",
+    "react": "^18.2.0"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/dsh-client-ui-primitives": {
