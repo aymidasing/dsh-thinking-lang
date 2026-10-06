@@ -16,7 +16,7 @@ dsh plugin --profile desktop add https://github.com/aymidasing/dsh-thinking-lang
 
 同一段地址也可以粘进设置里的插件管理器。执行前请**完全退出桌面端**：`--profile desktop` 操作的 profile 必须已经初始化，且没有进程正占用它。装完重启 GUI。
 
-`main` 分支只有 TypeScript 源码；`lib/` 与 `client/` 是构建产物，只随 Release 提供，由 [`.github/workflows/release.yml`](.github/workflows/release.yml) 在 tag 上构建并上传。附件名带版本号，所以每个版本的地址都是固定的。
+`main` 分支只有 TypeScript 源码；`lib/` 与 `client/` 是构建产物，只随 Release 提供。
 
 **更新**：换用新版本的附件地址重装一次。依赖是以 URL 记录的，`pnpm update` 对它无效。
 
