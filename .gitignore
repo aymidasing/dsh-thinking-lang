@@ -1,6 +1,6 @@
-# 构建产物（只忽略仓库根目录下的，别误伤 src/client/）
-/lib/
-/client/
+# lib/ 与 client/ 是构建产物，但已纳入版本控制：
+# pnpm 从 github: 安装时不会运行构建脚本，产物必须在仓库里，插件才能直接被加载。
+# （src/client/ 不受影响——下面的规则不会匹配到它。）
 
 node_modules/
 *.log
