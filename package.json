@@ -46,7 +46,7 @@
     "build": "tsc -p tsconfig.json && npm run build:client",
     "build:client": "node node_modules/tsdown/dist/run.mjs && node scripts/wrap-client-bundle.mjs",
     "check": "npm run typecheck && npm run build",
-    "prepack": "npm run build"
+    "prepare": "npm run build"
   },
   "dsh": {
     "bundle": {
