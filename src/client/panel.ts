@@ -190,18 +190,25 @@ const rowCss = [
 const STYLE_MARKER = "dsh-thinking-lang";
 
 /**
- * Inject the row stylesheet once per document.
- * 每份文档只注入一次行样式表。
+ * Inject the row stylesheet once per document, replacing a stale one.
+ * 每份文档只注入一次行样式表，已过期的那张会被替换。
  *
  * The guard reads the document rather than a module-level flag: a client plugin
  * can be mounted more than once against the same page, and only the DOM knows
- * whether this sheet is already there.
+ * whether this sheet is already there. Content is compared as well, because a
+ * hot-reloaded bundle keeps its marker while its CSS changes; skipping on the
+ * marker alone would leave the row styled by class names that no longer exist.
  * 判重依据是文档本身而不是模块级标志：客户端插件可能被重复挂载到同一页面，只有 DOM
- * 知道这张样式表是否已经存在。
+ * 知道这张样式表是否已经存在。同时比对内容：热重载的 bundle 标记不变而 CSS 已变，
+ * 只看标记就跳过会让这一行按已不存在的类名取样式。
  */
 export function mountRowStyles(): void {
 	if (typeof document === "undefined") return;
-	if (document.head.querySelector(`style[data-plugin=${JSON.stringify(STYLE_MARKER)}]`) !== null) return;
+	const existing = document.head.querySelector<HTMLStyleElement>(`style[data-plugin=${JSON.stringify(STYLE_MARKER)}]`);
+	if (existing !== null) {
+		if (existing.textContent === rowCss) return;
+		existing.remove();
+	}
 	const style = document.createElement("style");
 	style.dataset.plugin = STYLE_MARKER;
 	style.dataset.pluginCss = `${STYLE_MARKER}/row.css`;
