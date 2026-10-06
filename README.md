@@ -8,6 +8,40 @@
 
 ---
 
+## 安装
+
+```bash
+dsh plugin --profile desktop add https://github.com/aymidasing/dsh-thinking-lang/releases/download/v1.0.0/dsh-thinking-lang-1.0.0.tgz
+```
+
+同一段地址也可以粘进设置里的插件管理器。执行前请**完全退出桌面端**：`--profile desktop` 操作的 profile 必须已经初始化，且没有进程正占用它。装完重启 GUI。
+
+`main` 分支只有 TypeScript 源码；`lib/` 与 `client/` 是构建产物，只随 Release 提供，由 [`.github/workflows/release.yml`](.github/workflows/release.yml) 在 tag 上构建并上传。附件名带版本号，所以每个版本的地址都是固定的。
+
+**更新**：换用新版本的附件地址重装一次。依赖是以 URL 记录的，`pnpm update` 对它无效。
+
+**卸载**：
+
+```bash
+dsh plugin --profile desktop remove dsh-thinking-lang
+```
+
+设置里的「思考语言」那一行随之消失，提示词也不再注入。和安装一样，要在桌面端完全退出后执行。
+
+从源码装（开发用）：
+
+```bash
+npm install
+npm run build
+dsh plugin --profile desktop add "$PWD"
+```
+
+**语言约束对新会话生效**；切语言本身在已有会话的下一轮就生效。
+
+> **不要再用 `github:` 安装。** pnpm 11 默认拦下依赖的构建脚本，而 `github:` 源要靠 `prepare` 才产出 `lib/` 与 `client/`，安装会停在 `ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`，除非在 profile 的 `pnpm-workspace.yaml` 里逐名放行 `allowBuilds`。Release 附件是构建好的成品，装它不需要任何构建授权。
+
+---
+
 ## 它做什么
 
 在**设置 → 通用**里新增一行「思考语言」，位于宿主自身的语言设置项下方。整行只有一个下拉框：
@@ -120,34 +154,6 @@ DeepSeek 的上下文缓存自动生效、无需改代码，但它**只认从第
 **好消息是一次性的**：切完语言后新前缀会重新被缓存，从下一轮起恢复正常命中。所以代价约等于「重新算一遍完整上下文」这一次。
 
 **实用建议**：选定一种语言就别频繁来回切，尤其别在一轮对话中间切。切换不影响正确性，只影响钱。
-
----
-
-## 安装
-
-从 [Releases](https://github.com/aymidasing/dsh-thinking-lang/releases) 取打包好的附件，按它的地址安装：
-
-```bash
-dsh plugin --profile desktop add https://github.com/aymidasing/dsh-thinking-lang/releases/download/v1.0.0/dsh-thinking-lang-1.0.0.tgz
-```
-
-同一段地址也可以粘进设置里的插件管理器。执行前请**完全退出桌面端**：`--profile desktop` 操作的 profile 必须已经初始化，且没有进程正占用它。
-
-`main` 分支只有 TypeScript 源码；`lib/` 与 `client/` 是构建产物，只随 Release 提供，由 [`.github/workflows/release.yml`](.github/workflows/release.yml) 在 tag 上构建并上传。附件名带版本号，所以每个版本的地址都是固定的。
-
-从源码装（开发用）：
-
-```bash
-npm install
-npm run build
-dsh plugin --profile desktop add "$PWD"
-```
-
-装完重启 GUI。**语言约束对新会话生效**；切语言本身在已有会话的下一轮就生效。
-
-更新：换用新版本的附件地址重装一次。依赖是以 URL 记录的，`pnpm update` 对它无效。
-
-> **不要再用 `github:` 安装。** pnpm 11 默认拦下依赖的构建脚本，而 `github:` 源要靠 `prepare` 才产出 `lib/` 与 `client/`，安装会停在 `ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`，除非在 profile 的 `pnpm-workspace.yaml` 里逐名放行 `allowBuilds`。Release 附件是构建好的成品，装它不需要任何构建授权。
 
 ---
 
