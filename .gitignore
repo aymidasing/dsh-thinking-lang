@@ -1,7 +1,9 @@
-# lib/ 与 client/ 是构建产物，但已纳入版本控制：
-# pnpm 从 github: 安装时不会运行构建脚本，产物必须在仓库里，插件才能直接被加载。
-# （src/client/ 不受影响——下面的规则不会匹配到它。）
+# lib/ 与 client/ 是构建产物，不入库：main 只保留 TypeScript 源码，编译后的 js 由
+# GitHub Release 的 dsh-thinking-lang-<version>.tgz 提供（npm pack 的 files 白名单会把
+# 它们打进包）。两条规则锚定到仓库根，否则会连 src/client/ 一起匹配掉。
 
 node_modules/
+/lib/
+/client/
 *.log
 .DS_Store

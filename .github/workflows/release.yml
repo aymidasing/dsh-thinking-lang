@@ -1,0 +1,62 @@
+# Build the plugin on a version tag and publish the packed tarball as a Release asset.
+# 在版本 tag 上构建插件，并把打包产物作为 Release 资产发布。
+#
+# The repository carries TypeScript sources only, so `lib/` and `client/` are produced
+# here, from the very commit the tag points at, and never enter version control.
+# 仓库只存 TypeScript 源码，`lib/` 与 `client/` 在这里生成——取自 tag 指向的那个提交，
+# 且始终不进版本控制。
+#
+# Users install the asset directly:
+# 使用方直接安装该资产：
+#   dsh plugin --profile desktop add \
+#     https://github.com/aymidasing/dsh-thinking-lang/releases/download/<tag>/dsh-thinking-lang-<version>.tgz
+
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      # A tag that disagrees with package.json would publish the tarball under a
+      # version its own manifest denies.
+      # tag 与 package.json 不一致时，资产的版本号会与包内清单互相矛盾。
+      - name: Check the tag against package.json
+        run: |
+          expected="v$(node -p "require('./package.json').version")"
+          if [ "$expected" != "$GITHUB_REF_NAME" ]; then
+            echo "tag $GITHUB_REF_NAME does not match package.json version $expected"
+            exit 1
+          fi
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      # `prepack` runs the build, so this emits the artifacts the plugin loads.
+      # `prepack` 会先构建，所以这一步产出的就是插件要加载的产物。
+      - run: npm pack
+
+      - run: node scripts/verify-pack.mjs
+
+      - name: Record the tarball digest
+        run: sha256sum dsh-thinking-lang-*.tgz | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dsh-thinking-lang-*.tgz
+          generate_release_notes: true

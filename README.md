@@ -125,23 +125,29 @@ DeepSeek 的上下文缓存自动生效、无需改代码，但它**只认从第
 
 ## 安装
 
-从 GitHub 装上最新提交：
+从 [Releases](https://github.com/aymidasing/dsh-thinking-lang/releases) 取打包好的附件，按它的地址安装：
 
 ```bash
-dsh plugin --profile desktop add github:aymidasing/dsh-thinking-lang
+dsh plugin --profile desktop add https://github.com/aymidasing/dsh-thinking-lang/releases/download/v1.0.0/dsh-thinking-lang-1.0.0.tgz
 ```
+
+同一段地址也可以粘进设置里的插件管理器。执行前请**完全退出桌面端**：`--profile desktop` 操作的 profile 必须已经初始化，且没有进程正占用它。
+
+`main` 分支只有 TypeScript 源码；`lib/` 与 `client/` 是构建产物，只随 Release 提供，由 [`.github/workflows/release.yml`](.github/workflows/release.yml) 在 tag 上构建并上传。附件名带版本号，所以每个版本的地址都是固定的。
 
 从源码装（开发用）：
 
 ```bash
 npm install
 npm run build
-dsh plugin --profile desktop add .
+dsh plugin --profile desktop add "$PWD"
 ```
 
 装完重启 GUI。**语言约束对新会话生效**；切语言本身在已有会话的下一轮就生效。
 
-更新：把改动推到 `main`，再跑一次上面那条 `github:` 命令。
+更新：换用新版本的附件地址重装一次。依赖是以 URL 记录的，`pnpm update` 对它无效。
+
+> **不要再用 `github:` 安装。** pnpm 11 默认拦下依赖的构建脚本，而 `github:` 源要靠 `prepare` 才产出 `lib/` 与 `client/`，安装会停在 `ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`，除非在 profile 的 `pnpm-workspace.yaml` 里逐名放行 `allowBuilds`。Release 附件是构建好的成品，装它不需要任何构建授权。
 
 ---
 
@@ -161,6 +167,8 @@ npm run check     # typecheck + build
 
 Node（构建）需要 `^22.18.0 || >=24.11.0`；插件运行时不依赖本机 Node。
 
+打包与发版：`npm pack` 产出 `dsh-thinking-lang-<version>.tgz`（`prepack` 会先构建），[`scripts/verify-pack.mjs`](scripts/verify-pack.mjs) 校验它带着运行时要加载的文件。发版流程是改 [`package.json`](package.json) 的 `version` → 提交 → `git tag v<version>` → 推送 tag；工作流会构建、校验并把附件传到该 tag 的 Release，tag 与 `version` 不一致时直接失败。
+
 ---
 
 ## 目录结构
@@ -174,7 +182,9 @@ Node（构建）需要 `^22.18.0 || >=24.11.0`；插件运行时不依赖本机 
 | [`src/client/locales.ts`](src/client/locales.ts) | 三套行文案（简 / 繁 / 英） |
 | [`cordis.patch.yml`](cordis.patch.yml) | bundle patch，登记宿主入口 |
 | [`PROVENANCE.md`](PROVENANCE.md) | 设置行样式的来源记录，以及从 `app.asar` 读宿主源码的方法（维护用） |
-| `lib/` · `client/` | 构建产物，**随源码入库**——`github:` 安装不会运行构建脚本，产物必须先存在于仓库中 |
+| `lib/` · `client/` | 构建产物，**不入库**——只随 Release 附件提供；[`package.json`](package.json) 的 `files` 白名单负责把它们打进包 |
+| [`.github/workflows/release.yml`](.github/workflows/release.yml) | tag 触发：构建、校验、上传 Release 附件 |
+| [`scripts/verify-pack.mjs`](scripts/verify-pack.mjs) | 校验附件里带着运行时要加载的文件（构建链的看门人） |
 
 ### 依赖面
 
