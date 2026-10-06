@@ -125,6 +125,14 @@ DeepSeek 的上下文缓存自动生效、无需改代码，但它**只认从第
 
 ## 安装
 
+从 GitHub 装上最新提交：
+
+```bash
+dsh plugin --profile desktop add github:aymidasing/dsh-thinking-lang
+```
+
+从源码装（开发用）：
+
 ```bash
 npm install
 npm run build
@@ -132,6 +140,8 @@ dsh plugin --profile desktop add .
 ```
 
 装完重启 GUI。**语言约束对新会话生效**；切语言本身在已有会话的下一轮就生效。
+
+更新：把改动推到 `main`，再跑一次上面那条 `github:` 命令。
 
 ---
 
@@ -164,7 +174,7 @@ Node（构建）需要 `^22.18.0 || >=24.11.0`；插件运行时不依赖本机 
 | [`src/client/locales.ts`](src/client/locales.ts) | 三套行文案（简 / 繁 / 英） |
 | [`cordis.patch.yml`](cordis.patch.yml) | bundle patch，登记宿主入口 |
 | [`PROVENANCE.md`](PROVENANCE.md) | 设置行样式的来源记录，以及从 `app.asar` 读宿主源码的方法（维护用） |
-| `lib/` · `client/` | 构建产物（不入库） |
+| `lib/` · `client/` | 构建产物，**随源码入库**——`github:` 安装不会运行构建脚本，产物必须先存在于仓库中 |
 
 ### 依赖面
 
