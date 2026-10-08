@@ -32,7 +32,7 @@ import {
 } from "./core.js";
 
 /** Stable Cordis plugin name. / 稳定的 Cordis 插件名。 */
-export const name = "thinking-language";
+export const name = "ay-dsh-tk-lang";
 
 /** Plugin-level service requirements; services are acquired per branch below. / 插件级服务声明；服务在下方逐分支获取。 */
 export const inject: string[] = [];
@@ -291,13 +291,13 @@ export function apply(ctx: HostContext): void {
 		// reflect the newest setting without re-registering anything.
 		// 文本 thunk 每次组装都会重新求值，因此两半都始终反映最新设置，无需重新注册。
 		promptCtx.systemPrompt.section({
-			name: "app:thinking-lang",
+			name: "app:tk-lang",
 			order: SECTION_ORDER,
 			text: () => sectionText(currentLanguage(reader()))
 		});
 
 		promptCtx.systemPrompt.context({
-			name: "app:thinking-lang-line",
+			name: "app:tk-lang-line",
 			order: CONTEXT_ORDER,
 			text: () => contextText(currentLanguage(reader()))
 		});

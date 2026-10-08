@@ -1,6 +1,6 @@
 /**
- * Client entry: registers the thinking-language row in General settings.
- * 客户端入口：在「通用」设置页注册思考语言行。
+ * Client entry: registers the plugin's settings row in General settings.
+ * 客户端入口：在「通用」设置页注册本插件的设置行。
  *
  * The row is registered through the `settings.general.item` slot, which the
  * settings shell renders as one item on the General page — directly under the
@@ -13,13 +13,13 @@ import { dictionaries, type Dict } from "./locales.js";
 import { createRow, mountRowStyles, type SettingsDoc, type UiPrimitives } from "./panel.js";
 
 /** Stable Cordis plugin name. / 稳定的 Cordis 插件名。 */
-export const name = "thinking-language";
+export const name = "ay-dsh-tk-lang";
 
 /** The one client service this plugin requires. / 本插件唯一需要的客户端服务。 */
 export const inject = ["slots"];
 
 /** Locale namespace holding the row copy. / 保存行文案的 locale 命名空间。 */
-const LOCALE_NS = "thinking-language";
+const LOCALE_NS = "ay-dsh-tk-lang";
 
 /**
  * Position on the General page, sorted ascending. The host's own language row
@@ -118,7 +118,7 @@ export function apply(ctx: UiContext): void {
 			yield uiCtx.slots.register(
 				{
 					name: "settings.general.item",
-					id: "thinking-language",
+					id: "ay-dsh-tk-lang",
 					order: ROW_ORDER,
 					locale: LOCALE_NS,
 					inject: () => ({ doc, t })

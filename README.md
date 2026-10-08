@@ -11,7 +11,7 @@
 ## 安装
 
 ```bash
-dsh plugin --profile desktop add https://github.com/aymidasing/dsh-thinking-lang/releases/download/v1.0.0/dsh-thinking-lang-1.0.0.tgz
+dsh plugin --profile desktop add https://github.com/aymidasing/dsh-thinking-lang/releases/download/v1.0.1/dsh-thinking-lang-1.0.1.tgz
 ```
 
 同一段地址也可以粘进设置里的插件管理器。执行前请**完全退出桌面端**：`--profile desktop` 操作的 profile 必须已经初始化，且没有进程正占用它。装完重启 GUI。
@@ -225,7 +225,7 @@ Node（构建）需要 `^22.18.0 || >=24.11.0`；插件运行时不依赖本机 
 - **只支持三种思考语言**：简体中文、繁體中文、English。要增删语言，改 [`src/core.ts`](src/core.ts) 的 `CATALOGUE`，并在 [`src/client/locales.ts`](src/client/locales.ts) 补上对应文案。
 - **没有聊天命令**：切换语言只走设置页。如需 `/thinking-language`，可参照 `dsh-thinking-language` 的命令实现补上。
 - **`auto` 依赖运行时能报出系统语言**：Linux/macOS 走环境变量，Windows 走 `Intl`。两者都拿不到时会静默落到界面语言，再不行才是 `zh-CN`——顺序与取值方式见上文「`auto` 是怎么判定的」。
-- **与其它语言插件互斥**：本插件的插件 id 与设置命名空间都是 `thinking-language`，与同名的思考语言插件**无法共存**；包名 `dsh-thinking-lang` 与 `dsh-thinking-language` 也极为接近，注意区分。
+- **插件 id 与设置命名空间**：两者都是 `ay-dsh-tk-lang`，占的是一套自有命名；包名 `dsh-thinking-lang` 与 `dsh-thinking-language` 这类仍然相似，注意区分。不过功能重复的插件同时装上，设置页会各插一行、各自注入提示词，功能上仍是重复的。
 
 ---
 

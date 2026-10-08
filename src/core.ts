@@ -64,7 +64,7 @@ export const AUTO = "auto";
 const FALLBACK_TAG = "zh-CN";
 
 /** Settings namespace owned by this plugin. / 本插件拥有的设置命名空间。 */
-export const SETTINGS_NAMESPACE = "thinking-language";
+export const SETTINGS_NAMESPACE = "ay-dsh-tk-lang";
 
 /** The one field this plugin stores. / 本插件唯一保存的字段。 */
 export const FIELD_LANGUAGE = "language";
