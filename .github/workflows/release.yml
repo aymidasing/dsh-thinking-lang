@@ -47,8 +47,11 @@ jobs:
 
       - run: npm run typecheck
 
-      # `prepack` runs the build, so this emits the artifacts the plugin loads.
-      # `prepack` 会先构建，所以这一步产出的就是插件要加载的产物。
+      # The published tarball carries no build script, so pnpm never asks for
+      # build approval on install; this step produces the artifacts it contains.
+      # 发布包不带构建脚本，安装时 pnpm 不会要求构建授权；产物由这一步生成。
+      - run: npm run build
+
       - run: npm pack
 
       - run: node scripts/verify-pack.mjs

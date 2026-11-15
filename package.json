@@ -1,6 +1,6 @@
 {
   "name": "dsh-thinking-lang",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "DSH plugin: set the agent's reasoning language (Settings → General)",
   "license": "MIT",
   "repository": {
@@ -45,8 +45,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.client.json --noEmit",
     "build": "tsc -p tsconfig.json && npm run build:client",
     "build:client": "node node_modules/tsdown/dist/run.mjs && node scripts/wrap-client-bundle.mjs",
-    "check": "npm run typecheck && npm run build",
-    "prepack": "npm run build"
+    "check": "npm run typecheck && npm run build"
   },
   "dsh": {
     "bundle": {
