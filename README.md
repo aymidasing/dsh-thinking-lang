@@ -13,7 +13,7 @@
 ## 安装
 
 ```bash
-dsh plugin --profile desktop add https://github.com/aymidasing/dsh-thinking-lang/releases/download/v1.0.3/dsh-thinking-lang-1.0.3.tgz
+dsh plugin --profile desktop add https://github.com/aymidasing/dsh-thinking-lang/releases/latest/download/dsh-thinking-lang.tgz
 ```
 
 同一段地址也可以粘进设置里的插件管理器。执行前请**完全退出桌面端**：`--profile desktop` 操作的 profile 必须已经初始化，且没有进程正占用它。装完重启 GUI。
@@ -166,7 +166,7 @@ npm run check     # typecheck + build
 
 Node（构建）需要 `^22.18.0 || >=24.11.0`；插件运行时不依赖本机 Node。
 
-打包与发版：先 `npm run build`，再 `npm pack` 产出 `dsh-thinking-lang-<version>.tgz`；[`scripts/verify-pack.mjs`](scripts/verify-pack.mjs) 校验它带着运行时要加载的文件。发版流程是改 [`package.json`](package.json) 的 `version` → 提交 → `git tag v<version>` → 推送 tag；工作流会构建、校验并把附件传到该 tag 的 Release，tag 与 `version` 不一致时直接失败。发布包不带 `prepack`/`prepare`，所以 `dsh plugin add` 安装时不会触发 pnpm 的构建授权。
+打包与发版：先 `npm run build`，再 `npm pack` 产出 `dsh-thinking-lang-<version>.tgz`；[`scripts/verify-pack.mjs`](scripts/verify-pack.mjs) 校验它带着运行时要加载的文件。发版流程是改 [`package.json`](package.json) 的 `version` → 提交 → `git tag v<version>` → 推送 tag；工作流会构建、校验并把附件传到该 tag 的 Release，tag 与 `version` 不一致时直接失败。工作流还会上传一个固定名副本 `dsh-thinking-lang.tgz`，README 与插件市场都通过 `releases/latest/download/dsh-thinking-lang.tgz` 安装——这个地址永远指向最新版本，发版后不用改任何引用。发布包不带 `prepack`/`prepare`，所以 `dsh plugin add` 安装时不会触发 pnpm 的构建授权。
 
 ---
 

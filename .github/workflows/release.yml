@@ -54,12 +54,21 @@ jobs:
 
       - run: npm pack
 
+      # Fixed-name copy: the catalog and README install through
+      # releases/latest/download/dsh-thinking-lang.tgz, which always points at
+      # the newest release, so a version bump never needs a catalog PR.
+      # 固定名副本：目录与 README 通过 releases/latest/download/dsh-thinking-lang.tgz
+      # 安装，永远指向最新版本，发版不必再改目录条目。
+      - run: cp dsh-thinking-lang-*.tgz dsh-thinking-lang.tgz
+
       - run: node scripts/verify-pack.mjs
 
       - name: Record the tarball digest
-        run: sha256sum dsh-thinking-lang-*.tgz | tee -a "$GITHUB_STEP_SUMMARY"
+        run: sha256sum dsh-thinking-lang-*.tgz dsh-thinking-lang.tgz | tee -a "$GITHUB_STEP_SUMMARY"
 
       - uses: softprops/action-gh-release@v2
         with:
-          files: dsh-thinking-lang-*.tgz
+          files: |
+            dsh-thinking-lang-*.tgz
+            dsh-thinking-lang.tgz
           generate_release_notes: true
