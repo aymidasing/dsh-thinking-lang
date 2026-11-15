@@ -1,5 +1,7 @@
 # 来源记录
 
+[![](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)
+
 本文件只记录一件事：设置行的样式从哪里来。使用说明看 [README.md](README.md)。
 
 ---

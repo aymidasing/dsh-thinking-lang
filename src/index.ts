@@ -5,17 +5,18 @@
  * Injection shape (see README for the reasoning):
  * 注入形态（设计理由见 README）：
  *
- *   section  order   1  →  the rules plus the language name, once per session
- *   context  order -10  →  the language name, re-evaluated on every model call
+ *   section  order  1  →  the authoritative rule, once per session
+ *   pre-step step 1  →  a short reminder, at most once per turn (10 min apart)
  *
- *   section  order   1  →  规则加语言名，每会话组装一次
- *   context  order -10  →  语言名，每次模型调用重新求值
+ *   section  order  1  →  权威规则，每会话组装一次
+ *   pre-step step 1  →  短提醒，每轮最多一次（间隔 10 分钟）
  *
  * The host context is described by a local structural interface rather than the
  * `@deepseek-ai/cordis` type, so this package carries no DSH type dependency.
  * 宿主上下文用本文件内的结构化接口描述，而不引用 `@deepseek-ai/cordis` 的类型，
  * 因此本包不依赖任何 DSH 类型包。
  */
+import { randomUUID } from "node:crypto";
 import z from "@deepseek-ai/schemastery";
 import {
 	AUTO,
@@ -24,10 +25,10 @@ import {
 	SETTINGS_NAMESPACE,
 	type Reader,
 	type ThinkingSettings,
-	contextText,
 	effectiveCode,
 	nativeNameFor,
 	normalizeSettings,
+	reminderText,
 	sectionText
 } from "./core.js";
 
@@ -46,8 +47,8 @@ export const inject: string[] = [];
  */
 const SECTION_ORDER = 1;
 
-/** Context order: ahead of the other per-step blocks. / 上下文的顺序：排在其它每步注入块之前。 */
-const CONTEXT_ORDER = -10;
+/** Minimum milliseconds between two per-turn reminders in one session. / 同一会话中两次每轮提醒之间的最小毫秒数。 */
+const REMINDER_INTERVAL_MS = 600_000;
 
 /** Settings namespace holding the desktop UI locale. / 保存桌面 UI 语言的设置命名空间。 */
 const LOCALE_NAMESPACE = "locale";
@@ -269,37 +270,84 @@ function currentLanguage(reader: Reader): string {
 	return effectiveCode(settings, osLocale(), typeof desktop === "string" ? desktop : undefined);
 }
 
+/** One pre-step payload slice this entry reads. / 本入口读取的 pre-step 载荷切片。 */
+interface PreStepPayload {
+	agent: { session: { id: string } };
+	turn: number;
+	step: number;
+	signal: AbortSignal;
+}
+
+/** The pre-step decision this entry appends a reminder to. / 本入口追加提醒的 pre-step 决策。 */
+interface PreStepDecision {
+	kind: "enter" | "reject";
+	messages: Array<Record<string, unknown>>;
+}
+
 /** The host plugin context shape this entry relies on. / 本入口依赖的宿主插件上下文形状。 */
 interface HostContext {
 	get(name: string): unknown;
 	inject(names: string[], callback: (ctx: HostContext) => void): unknown;
+	on(
+		event: "agent/pre-step",
+		listener: (payload: PreStepPayload, next: () => Promise<PreStepDecision>) => Promise<PreStepDecision>,
+		options?: { prepend?: boolean }
+	): unknown;
 	systemPrompt: {
 		section(section: { name: string; order?: number; text: () => string }): unknown;
-		context(context: { name: string; order?: number; text: () => string }): unknown;
 	};
 }
 
 /**
- * Register the settings consumer, the prompt section, and the per-step language line.
- * 注册设置消费方、提示词段，以及每步注入的语言行。
+ * Build the durable user message carrying one reminder.
+ * 生成携带一条提醒的持久用户消息。
+ *
+ * The message keeps the plugin as its source, so the session log can attribute
+ * the injection and the host restores it like any other user message.
+ * 消息以本插件为来源，会话日志因此能归属这次注入，宿主也像普通用户消息一样恢复它。
+ */
+function reminderMessage(text: string): Record<string, unknown> {
+	return {
+		id: randomUUID(),
+		role: "user",
+		content: [{ type: "text", text }],
+		source: { kind: name, form: "snapshot", sections: [{ name, text }] }
+	};
+}
+
+/**
+ * Register the settings consumer, the prompt section, and the per-turn reminder.
+ * 注册设置消费方、提示词段，以及每轮一次的提醒。
  */
 export function apply(ctx: HostContext): void {
+	/** Latest reminder time per session, in process memory. / 每个会话最近一次提醒时间，存于进程内存。 */
+	const lastReminderAt = new Map<string, number>();
+
 	ctx.inject(["systemPrompt", "settings"], (promptCtx) => {
 		const reader = () => settingsReader(promptCtx.get("settings") as HostSettings | undefined);
 
-		// The text thunks are re-evaluated per assembly, so both halves always
-		// reflect the newest setting without re-registering anything.
-		// 文本 thunk 每次组装都会重新求值，因此两半都始终反映最新设置，无需重新注册。
+		// The text thunk is re-evaluated per assembly, so the section always
+		// reflects the newest setting without re-registering anything.
+		// 文本 thunk 每次组装都会重新求值，因此该段始终反映最新设置，无需重新注册。
 		promptCtx.systemPrompt.section({
 			name: "app:tk-lang",
 			order: SECTION_ORDER,
 			text: () => sectionText(currentLanguage(reader()))
 		});
 
-		promptCtx.systemPrompt.context({
-			name: "app:tk-lang-line",
-			order: CONTEXT_ORDER,
-			text: () => contextText(currentLanguage(reader()))
-		});
+		// The reminder runs before the other pre-step listeners, so its message is
+		// appended after theirs and stays closest to the end of the request.
+		// 该提醒先于其它 pre-step 监听器执行，因此它的消息追加在它们之后，离请求末尾最近。
+		promptCtx.on("agent/pre-step", async (payload, next) => {
+			const decision = await next();
+			if (decision.kind !== "enter" || payload.signal.aborted || payload.step !== 1) return decision;
+			const now = Date.now();
+			const previous = lastReminderAt.get(payload.agent.session.id);
+			if (previous !== undefined && now - previous < REMINDER_INTERVAL_MS) return decision;
+			const text = reminderText(currentLanguage(reader()));
+			if (text === "") return decision;
+			lastReminderAt.set(payload.agent.session.id, now);
+			return { ...decision, messages: [...decision.messages, reminderMessage(text)] };
+		}, { prepend: true });
 	});
 }

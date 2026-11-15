@@ -1,6 +1,6 @@
 {
   "name": "dsh-thinking-lang",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "DSH plugin: set the agent's reasoning language (Settings → General)",
   "license": "MIT",
   "repository": {

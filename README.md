@@ -1,5 +1,7 @@
 # dsh-thinking-lang
 
+[![](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)
+
 面向 **DeepSeek Harness（dsh-desk）** 的插件：设置智能体内部推理（思考）所用的语言。
 
 **目标环境：** DeepSeek Harness **`0.2.0-rc.2`+**（`dsh -V`）。**License：** MIT。
@@ -11,7 +13,7 @@
 ## 安装
 
 ```bash
-dsh plugin --profile desktop add https://github.com/aymidasing/dsh-thinking-lang/releases/download/v1.0.1/dsh-thinking-lang-1.0.1.tgz
+dsh plugin --profile desktop add https://github.com/aymidasing/dsh-thinking-lang/releases/download/v1.0.2/dsh-thinking-lang-1.0.2.tgz
 ```
 
 同一段地址也可以粘进设置里的插件管理器。执行前请**完全退出桌面端**：`--profile desktop` 操作的 profile 必须已经初始化，且没有进程正占用它。装完重启 GUI。
@@ -43,6 +45,8 @@ dsh plugin --profile desktop add "$PWD"
 ---
 
 ## 它做什么
+
+![设置 → 通用中的「思考语言」行](assets/settings-general.png)
 
 在**设置 → 通用**里新增一行「思考语言」，位于宿主自身的语言设置项下方。整行只有一个下拉框：
 
@@ -77,40 +81,39 @@ dsh plugin --profile desktop add "$PWD"
 
 ## 提示词是怎么注入的
 
-一份提示词被拆成两半，注入两个不同的位置——**区别不在内容，而在求值时机**。
+规则用**所选语言本身**书写（不是英文语言名），分两个位置注入——区别在**频率**：
 
-| | `systemPrompt.section` | `systemPrompt.context` |
+| | `systemPrompt.section` | `agent/pre-step` 提醒 |
 |---|---|---|
-| 由谁生成 | [`sectionText`](src/core.ts) | [`contextText`](src/core.ts) |
-| 内容 | 一行规则，**直接写出语言名** | 只有语言名加一句强调 |
-| 随什么变化 | 随思考语言变 | 随思考语言变 |
-| 求值时机 | 每会话组装一次 | **每次模型调用**重新求值 |
-| 顺序 | `order: 1` | `order: -10` |
+| 由谁生成 | [`sectionText`](src/core.ts) | [`reminderText`](src/core.ts) |
+| 内容 | 完整规则句 | 一句短提醒 |
+| 注入形态 | 系统提示词的一段 | 一条 user 消息，追加在请求末尾 |
+| 频率 | 每会话组装一次（文本变化时提交） | 每轮第一步，且距上次 ≥10 分钟 |
+| 顺序 | `order: 1`，紧跟 persona | `prepend` 注册，晚于其它 pre-step 注入 |
 
 ### 实际注入的文本
 
-两段文本都由 [`src/core.ts`](src/core.ts) 生成。**这里是公开文档，不转载注入原文**——它们会直接进入模型上下文，属于实现细节，只以「去看代码」的方式给出入口。
+文本由 [`src/core.ts`](src/core.ts) 的 `CATALOGUE` 提供，每种语言一份、**用该语言书写**：
 
-| | `systemPrompt.section` | `systemPrompt.context` |
+| 语言 | section（规则句） | reminder（每轮提醒） |
 |---|---|---|
-| 生成函数 | `sectionText` | `contextText` |
-| 形状 | 一行规则，句中嵌入所选语言的英文名 | 一个固定标记，后接所选语言的英文名与一句强调 |
-| 长度 | 124–136 字符（**每种语言一份**） | 53–65 字符 |
-| 语言名形式 | 英文名，如 `Simplified Chinese` / `Traditional Chinese` / `English` | 同左 |
+| 简体中文 | 推理规则：思考、推理与规划一律使用简体中文。回复用户时使用用户所用的语言。 | 继续用简体中文思考、推理与规划。 |
+| 繁體中文 | 推理規則：思考、推理與規劃一律使用繁體中文。回覆使用者時使用使用者所用的語言。 | 繼續用繁體中文思考、推理與規劃。 |
+| English | Reasoning rules: think, reason, and plan in English. Reply to the user in the language they use. | Keep thinking, reasoning, and planning in English. |
 
-要看注入原文，读 [`src/core.ts`](src/core.ts) 里这两个函数；改完 `npm run build` 即可生效。
+改文本改 `CATALOGUE`，再 `npm run build`。
 
 这个拆分带来两个直接结果：
 
-1. **切语言在下一轮立即生效** —— context 每一步都重新求值，不必重启或新开会话。
-2. **section 里那个语言名要等新会话** —— 它在会话组装时定稿。同一个会话中途改语言，context 那行会立刻跟着变，但 section 里的名字要等下次组装才跟上。
+1. **section 是权威版本** —— 位于 persona 之后、所有工具说明之前；切语言后由宿主按文本变化提交。
+2. **pre-step 提醒负责实时性** —— 追加在 `decision.messages` 末尾，落在 runtime-context、skill catalog、time-context 之后，是请求里最后的内容。
 
-> 两段都带语言，是**有意的冗余**：section 是权威版本（位于 persona 之后、所有工具说明之前），context 只负责实时性。想去掉重复就删掉 context——代价是切语言必须新开会话。
+> 上一版把提醒塞进 `systemPrompt.context`：它随 runtime-context 快照走，只在快照内容变化时追加，稳定期会沉到历史深处。现在改成独立消息、按轮注入。
 
 ### 顺序与优先级
 
 - section 的 `order: 1` 紧跟在宿主的 persona 之后、第一个策略段之前——也就是渲染出来的 persona 那句话的下一行。
-- context 的 `order: -10` 排在其它每步注入块之前。注意：section 与 context 属于两个不同的序列，两者的 order 数值不可直接比较。
+- 提醒消息排在请求最末。`prepend` 让本监听器先于其它 pre-step 监听器执行，其 append 发生在链返回之后，因此晚于 time-context 等注入。
 
 > 取值依据是 DSH 自己的分段表：`@deepseek-ai/dsh-system-prompt` 里的 `SECTION_ORDERS`——身份 `-1000`、部署 persona `0`、`PLAN_POLICY` `500`、工具段从 `1000` 起。`order: 1` 正好落在 persona 与第一个策略段之间。
 
@@ -118,40 +121,30 @@ dsh plugin --profile desktop add "$PWD"
 
 ## Token 开销（实测）
 
-用 DeepSeek V3 的词表实测（[`@lenml/tokenizer-deepseek_v3`](https://www.npmjs.com/package/@lenml/tokenizer-deepseek_v3)，不计特殊 token）：
+用 DeepSeek V4 词表实测（不计特殊 token）：
 
-| 语言 | section | context |
+| 语言 | section | reminder |
 |---|---|---|
-| 简体中文 | 29 | 16 |
-| 繁體中文 | 29 | 16 |
-| English | 28 | 15 |
+| 简体中文 | 21 | 10 |
+| 繁體中文 | 22 | 10 |
+| English | 23 | 10 |
 
-语言名本身只占 1–2 token，所以**换语言对每轮开销几乎没有影响**。
-
-section 每会话一次，不随轮次增长；context 每轮一次。跑 100 轮：
-
-| 语言 | section | context × 100 | 合计 |
-|---|---|---|---|
-| 简体 / 繁體 | 29 | 1600 | 1629 |
-| English | 28 | 1500 | 1528 |
+section 每会话一次；reminder 每轮最多一条（10 分钟内不重复），100 轮约 1000 token。**换语言对每轮开销几乎没有影响**。
 
 ---
 
 ## ⚠️ 切换语言的缓存代价
 
-**这才是本插件唯一需要留意的开销，量级远大于上面那几十个 token。**
-
 DeepSeek 的上下文缓存自动生效、无需改代码，但它**只认从第 0 个 token 起完全相同的前缀**——官方原话：「只有当两个请求的前缀内容相同时（从第 0 个 token 开始相同），才算重复。**中间开始的重复不能被缓存命中**。」（[API 上线硬盘缓存](https://api-docs.deepseek.com/zh-cn/news/news0802/)）
 
-而 `section` 内嵌了所选语言的名字，位置又相当靠前（`order: 1`，紧跟 persona）。于是：
+切语言会改变 section 文本，影响范围取决于宿主如何处理 system prompt 更新：
 
-> 改一次思考语言，**从 section 那一行往后的前缀全部改变**——包括其余 system prompt（工具说明等）和全部对话历史，那一轮统统按「缓存未命中」计费。
+- **支持 in-history 的模型**（DeepSeek 官方模型声明 `systemPromptUpdate: 'in-history'`）：新 system prompt 作为一条消息追加到历史尾部，旧前缀仍可命中；
+- **其它模型**：宿主替换开头那条 system message，从那里往后的 Token 全部重算。
 
-差价是 **50 倍**（`deepseek-flash` 空闲时段：命中 0.02 元 / 百万 token，未命中 1 元 / 百万 token；高峰时段同样 50 倍。见[模型 & 价格](https://api-docs.deepseek.com/zh-cn/quick_start/pricing/)）。
+reminder 每轮追加在请求末尾，只新增尾部 Token，不会让已有前缀失效。
 
-`context` 那行同样随语言变化，只是它 inject 的深度不同、影响面可能小一些；两段中任何一段变了，从它往后的前缀都不再匹配。
-
-**好消息是一次性的**：切完语言后新前缀会重新被缓存，从下一轮起恢复正常命中。所以代价约等于「重新算一遍完整上下文」这一次。
+差价是 **50 倍**（`deepseek-flash` 空闲时段：命中 0.02 元 / 百万 token，未命中 1 元 / 百万 token；高峰时段同样 50 倍。见[模型 & 价格](https://api-docs.deepseek.com/zh-cn/quick_start/pricing/)）。切换的代价仍是一次性的，从下一轮起恢复命中。
 
 **实用建议**：选定一种语言就别频繁来回切，尤其别在一轮对话中间切。切换不影响正确性，只影响钱。
 
@@ -182,7 +175,7 @@ Node（构建）需要 `^22.18.0 || >=24.11.0`；插件运行时不依赖本机 
 | 路径 | 说明 |
 |------|------|
 | [`src/core.ts`](src/core.ts) | 语言目录、配置归一化、两份提示词生成。**纯函数，无宿主依赖**，客户端与宿主端共用。locale 解析走平台自带的 `Intl.Locale` |
-| [`src/index.ts`](src/index.ts) | 宿主入口：Config schema、section 与 context 注册、语言解析（含操作系统语言探测） |
+| [`src/index.ts`](src/index.ts) | 宿主入口：Config schema、section 与 pre-step 提醒注册、语言解析（含操作系统语言探测） |
 | [`src/client/index.ts`](src/client/index.ts) | 客户端入口：在 `settings.general.item` 插槽注册设置行 |
 | [`src/client/panel.ts`](src/client/panel.ts) | 单行设置控件与样式 |
 | [`src/client/locales.ts`](src/client/locales.ts) | 三套行文案（简 / 繁 / 英） |
@@ -191,6 +184,7 @@ Node（构建）需要 `^22.18.0 || >=24.11.0`；插件运行时不依赖本机 
 | `lib/` · `client/` | 构建产物，**不入库**——只随 Release 附件提供；[`package.json`](package.json) 的 `files` 白名单负责把它们打进包 |
 | [`.github/workflows/release.yml`](.github/workflows/release.yml) | tag 触发：构建、校验、上传 Release 附件 |
 | [`scripts/verify-pack.mjs`](scripts/verify-pack.mjs) | 校验附件里带着运行时要加载的文件（构建链的看门人） |
+| [`assets/`](assets/) | README 用的截图；GitHub 直接渲染，不随 npm 包发布 |
 
 ### 依赖面
 

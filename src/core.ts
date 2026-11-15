@@ -2,19 +2,19 @@
  * Language catalogue, settings normalization, and the two halves of the prompt.
  * 语言目录、设置归一化，以及提示词的两个半边。
  *
- * Both halves name the selected language; what separates them is WHEN they are
- * evaluated:
- * 两半都会指名所选语言；区别在于**求值时机**：
+ * Both halves state the rule in the selected language itself, so the prompt
+ * carries a matching language signal instead of an English language name:
+ * 两半都用所选语言本身写规则，提示词因此带有同语言信号，而不是英文语言名：
  *
- *   - {@link sectionText} goes in as a `systemPrompt.section` and is assembled
- *     once per session, so its language name holds until the next session.
- *   - {@link contextText} goes in as a `systemPrompt.context` and is re-evaluated
- *     on every model call, so a language switch lands on the next turn.
+ *   - {@link sectionText} goes in as a `systemPrompt.section`: the authoritative
+ *     rule, re-evaluated per assembly and committed when its text changes.
+ *   - {@link reminderText} goes in through the per-turn pre-step reminder:
+ *     re-evaluated on every model call and injected at most once per turn.
  *
- *   - {@link sectionText} 作为 `systemPrompt.section` 注入，每会话组装一次，
- *     其中的语言名要到下一个会话才会更新。
- *   - {@link contextText} 作为 `systemPrompt.context` 注入，每次模型调用重新求值，
- *     切换语言在下一轮即生效。
+ *   - {@link sectionText} 作为 `systemPrompt.section` 注入：权威规则，每次组装
+ *     重新求值，文本变化时才提交。
+ *   - {@link reminderText} 由每轮一次的 pre-step 提醒注入：每次模型调用重新求值，
+ *     每轮最多注入一次。
  *
  * Locale resolution is delegated to the platform's own `Intl.Locale` rather than
  * to a hand-rolled BCP-47 parser: the runtime already knows how to split a tag
@@ -30,10 +30,12 @@
 export interface Language {
 	/** BCP-47 tag; also the value persisted in settings. / BCP-47 标签；同时也是存入设置的值。 */
 	tag: string;
-	/** English name written into the prompt text. / 写进提示词文本的英文名。 */
-	promptName: string;
 	/** Native name shown in the settings picker. / 设置选择器里显示的本族语名。 */
 	nativeName: string;
+	/** The rule sentence written in this language. / 用本语言写成的规则句。 */
+	section: string;
+	/** The short per-turn reminder written in this language. / 用本语言写成的每轮短提醒。 */
+	reminder: string;
 }
 
 /**
@@ -49,13 +51,25 @@ export interface Language {
  * 额外带标记。
  */
 export const CATALOGUE: readonly Language[] = [
-	{ tag: "zh-CN", promptName: "Simplified Chinese", nativeName: "简体中文" },
-	{ tag: "zh-TW", promptName: "Traditional Chinese", nativeName: "繁體中文" },
-	{ tag: "en", promptName: "English", nativeName: "English" }
+	{
+		tag: "zh-CN",
+		nativeName: "简体中文",
+		section: "推理规则：思考、推理与规划一律使用简体中文。回复用户时使用用户所用的语言。",
+		reminder: "继续用简体中文思考、推理与规划。"
+	},
+	{
+		tag: "zh-TW",
+		nativeName: "繁體中文",
+		section: "推理規則：思考、推理與規劃一律使用繁體中文。回覆使用者時使用使用者所用的語言。",
+		reminder: "繼續用繁體中文思考、推理與規劃。"
+	},
+	{
+		tag: "en",
+		nativeName: "English",
+		section: "Reasoning rules: think, reason, and plan in English. Reply to the user in the language they use.",
+		reminder: "Keep thinking, reasoning, and planning in English."
+	}
 ];
-
-/** The marker the per-step context line starts with. / 每步上下文行的起始标记。 */
-const MARKER = "[RL]";
 
 /** The sentinel meaning "follow the host locale". / 表示「跟随宿主语言」的哨兵值。 */
 export const AUTO = "auto";
@@ -219,24 +233,20 @@ export function effectiveCode(settings: ThinkingSettings, osLocale?: string, des
 }
 
 /**
- * Build the system-prompt section, naming the selected language directly.
- * 生成系统提示词段，直接指名所选语言。
+ * Build the system-prompt rule sentence in the selected language.
+ * 用所选语言生成系统提示词规则句。
  *
- * This text therefore varies with the selection — one variant per language.
- * 因此本段文本随所选语言变化，每种语言一个版本。
+ * The text varies with the selection — one variant per language.
+ * 文本随所选语言变化，每种语言一个版本。
  */
 export function sectionText(code: string): string {
-	const language = languageOf(code);
-	if (language === undefined) return "";
-	return `Reasoning rules (apply to every response):Think, reason, and plan MUST use ${language.promptName}. Reply to the user in their own language.`;
+	return languageOf(code)?.section ?? "";
 }
 
 /**
- * Build the per-step context line that names the reasoning language.
- * 生成每一步的上下文行，指名推理的思考语言。
+ * Build the short per-turn reminder in the selected language.
+ * 用所选语言生成每轮短提醒。
  */
-export function contextText(code: string): string {
-	const language = languageOf(code);
-	if (language === undefined) return "";
-	return `${MARKER} ${language.promptName} MUST be used to think, reason, and plan.`;
+export function reminderText(code: string): string {
+	return languageOf(code)?.reminder ?? "";
 }
