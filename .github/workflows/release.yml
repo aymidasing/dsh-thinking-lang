@@ -31,7 +31,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
-          cache: npm
           registry-url: https://registry.npmjs.org
 
       # A tag that disagrees with package.json would publish the tarball under a
@@ -68,10 +67,11 @@ jobs:
       - name: Record the tarball digest
         run: sha256sum dsh-thinking-lang-*.tgz dsh-thinking-lang.tgz | tee -a "$GITHUB_STEP_SUMMARY"
 
+      # Trusted publishing: npm detects the Actions OIDC environment and
+      # authenticates with a short-lived token, so no NPM_TOKEN secret is used.
+      # 受信任发布：npm 自动识别 Actions 的 OIDC 环境并换取短时令牌，不需要 NPM_TOKEN。
       - name: Publish to npm
         run: npm publish --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - uses: softprops/action-gh-release@v2
         with:
