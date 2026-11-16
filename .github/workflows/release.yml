@@ -28,10 +28,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # No registry-url: it makes setup-node write an .npmrc whose
+      # `_authToken=${NODE_AUTH_TOKEN}` placeholder is now empty. OIDC needs no
+      # registry setting — npm already publishes to registry.npmjs.org.
+      # 不设 registry-url：它会写出带 `_authToken=${NODE_AUTH_TOKEN}` 占位的 .npmrc，
+      # 而该变量已不再提供。OIDC 不需要 registry 设置，npm 默认就发到 registry.npmjs.org。
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
-          registry-url: https://registry.npmjs.org
 
       # A tag that disagrees with package.json would publish the tarball under a
       # version its own manifest denies.
