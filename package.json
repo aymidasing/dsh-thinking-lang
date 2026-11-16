@@ -36,6 +36,7 @@
     "lib",
     "client",
     "src",
+    "assets",
     "cordis.patch.yml",
     "README.md",
     "PROVENANCE.md",

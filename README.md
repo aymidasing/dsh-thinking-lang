@@ -13,14 +13,14 @@
 ## 安装
 
 ```bash
-dsh plugin --profile desktop add https://github.com/aymidasing/dsh-thinking-lang/releases/latest/download/dsh-thinking-lang.tgz
+dsh plugin --profile desktop add dsh-thinking-lang
 ```
 
-同一段地址也可以粘进设置里的插件管理器。执行前请**完全退出桌面端**：`--profile desktop` 操作的 profile 必须已经初始化，且没有进程正占用它。装完重启 GUI。
+也可以把包名 `dsh-thinking-lang` 粘进设置里的插件管理器安装框。执行前请**完全退出桌面端**：`--profile desktop` 操作的 profile 必须已经初始化，且没有进程正占用它。装完重启 GUI。
 
-`main` 分支只有 TypeScript 源码；`lib/` 与 `client/` 是构建产物，只随 Release 提供。
+`main` 分支只有 TypeScript 源码；`lib/` 与 `client/` 是构建产物。安装走 npm 包，或 [Release 附件](https://github.com/aymidasing/dsh-thinking-lang/releases/latest)（`https://github.com/aymidasing/dsh-thinking-lang/releases/latest/download/dsh-thinking-lang.tgz`），两者都是构建好的成品，装的时候不会触发构建授权。
 
-**更新**：换用新版本的附件地址重装一次。依赖是以 URL 记录的，`pnpm update` 对它无效。
+**更新**：设置 → 插件里点「更新」，或重新执行一次上面的安装命令。npm 依赖记录为 `^1.0.5` 这样的版本范围，能跟随新版本；用 Release 附件装的话依赖以 URL 记录，换版本要重装一次新的附件地址。
 
 **卸载**：
 
@@ -40,19 +40,21 @@ dsh plugin --profile desktop add "$PWD"
 
 **语言约束对新会话生效**；切语言本身在已有会话的下一轮就生效。
 
-> **不要再用 `github:` 安装。** pnpm 11 默认拦下依赖的构建脚本，而 `github:` 源要靠 `prepare` 才产出 `lib/` 与 `client/`，安装会停在 `ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`，除非在 profile 的 `pnpm-workspace.yaml` 里逐名放行 `allowBuilds`。Release 附件是构建好的成品，包里没有 `prepack`/`prepare`，装它不会触发构建授权。
+> **不要再用 `github:` 安装。** pnpm 11 默认拦下依赖的构建脚本，而 `github:` 源要靠 `prepare` 才产出 `lib/` 与 `client/`，安装会停在 `ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`，除非在 profile 的 `pnpm-workspace.yaml` 里逐名放行 `allowBuilds`。npm 包与 Release 附件都是成品，包里没有 `prepack`/`prepare`，装它不会触发构建授权。
 
 ---
 
 ## 它做什么
-
-![设置 → 通用中的「思考语言」行](assets/settings-general.png)
 
 在**设置 → 通用**里新增一行「思考语言」，位于宿主自身的语言设置项下方。整行只有一个下拉框：
 
 | 配置项 | 取值 | 作用 |
 |--------|------|------|
 | **思考语言** | 自动 / 简体中文 / 繁體中文 / English | 内部推理与规划所用的语言 |
+
+![设置 → 通用中的「思考语言」行](assets/settings-general.png)
+
+*截图：设置 → 通用里的「思考语言」行，紧贴在宿主自己的界面语言下方。*
 
 ### `auto` 是怎么判定的
 
@@ -166,7 +168,7 @@ npm run check     # typecheck + build
 
 Node（构建）需要 `^22.18.0 || >=24.11.0`；插件运行时不依赖本机 Node。
 
-打包与发版：先 `npm run build`，再 `npm pack` 产出 `dsh-thinking-lang-<version>.tgz`；[`scripts/verify-pack.mjs`](scripts/verify-pack.mjs) 校验它带着运行时要加载的文件。发版流程是改 [`package.json`](package.json) 的 `version` → 提交 → `git tag v<version>` → 推送 tag；工作流会构建、校验并把附件传到该 tag 的 Release，tag 与 `version` 不一致时直接失败。工作流还会上传一个固定名副本 `dsh-thinking-lang.tgz`，README 与插件市场都通过 `releases/latest/download/dsh-thinking-lang.tgz` 安装——这个地址永远指向最新版本，发版后不用改任何引用。发布包不带 `prepack`/`prepare`，所以 `dsh plugin add` 安装时不会触发 pnpm 的构建授权。
+打包与发版：先 `npm run build`，再 `npm pack` 产出 `dsh-thinking-lang-<version>.tgz`；[`scripts/verify-pack.mjs`](scripts/verify-pack.mjs) 校验它带着运行时要加载的文件。发版流程是改 [`package.json`](package.json) 的 `version` → 提交 → `git tag v<version>` → 推送 tag；工作流会构建、校验、发布到 npm（OIDC trusted publishing，不需要 token），并把附件传到该 tag 的 Release，tag 与 `version` 不一致时直接失败。工作流还会上传一个固定名副本 `dsh-thinking-lang.tgz`，供 `releases/latest/download/dsh-thinking-lang.tgz` 这个永远指向最新版本的地址使用。发布包不带 `prepack`/`prepare`，所以 `dsh plugin add` 安装时不会触发 pnpm 的构建授权。
 
 ---
 
@@ -184,7 +186,7 @@ Node（构建）需要 `^22.18.0 || >=24.11.0`；插件运行时不依赖本机 
 | `lib/` · `client/` | 构建产物，**不入库**——只随 Release 附件提供；[`package.json`](package.json) 的 `files` 白名单负责把它们打进包 |
 | [`.github/workflows/release.yml`](.github/workflows/release.yml) | tag 触发：构建、校验、上传 Release 附件 |
 | [`scripts/verify-pack.mjs`](scripts/verify-pack.mjs) | 校验附件里带着运行时要加载的文件（构建链的看门人） |
-| [`assets/`](assets/) | README 用的截图；GitHub 直接渲染，不随 npm 包发布 |
+| [`assets/`](assets/) | README 用的截图；随 npm 包与 Release 附件一起发布，插件详情页按相对路径直接读取 |
 
 ### 依赖面
 
