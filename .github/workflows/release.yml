@@ -20,6 +20,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   release:
@@ -31,6 +32,7 @@ jobs:
         with:
           node-version: "24"
           cache: npm
+          registry-url: https://registry.npmjs.org
 
       # A tag that disagrees with package.json would publish the tarball under a
       # version its own manifest denies.
@@ -65,6 +67,11 @@ jobs:
 
       - name: Record the tarball digest
         run: sha256sum dsh-thinking-lang-*.tgz dsh-thinking-lang.tgz | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish to npm
+        run: npm publish --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - uses: softprops/action-gh-release@v2
         with:
