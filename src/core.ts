@@ -80,8 +80,23 @@ const FALLBACK_TAG = "zh-CN";
 /** Settings namespace owned by this plugin. / 本插件拥有的设置命名空间。 */
 export const SETTINGS_NAMESPACE = "ay-dsh-tk-lang";
 
-/** The one field this plugin stores. / 本插件唯一保存的字段。 */
+/** The language field this plugin stores. / 本插件保存的语言字段。 */
 export const FIELD_LANGUAGE = "language";
+
+/** The reminder field this plugin stores. / 本插件保存的提醒字段。 */
+export const FIELD_REMINDER = "reminderMinutes";
+
+/** Reminder value that disables the per-turn reminder. / 关闭每轮提醒的取值。 */
+export const REMINDER_OFF = -1;
+
+/** Reminder value that injects on every turn. / 每轮都注入的取值。 */
+export const REMINDER_EVERY_TURN = 0;
+
+/** Reminder interval applied when the field is absent. / 字段缺失时的提醒间隔（分钟）。 */
+export const DEFAULT_REMINDER_MINUTES = 30;
+
+/** Largest accepted reminder interval. / 允许的最大提醒间隔（分钟）。 */
+export const MAX_REMINDER_MINUTES = 1440;
 
 /** Every value the picker offers besides {@link AUTO}. / 选择器在 {@link AUTO} 之外提供的全部取值。 */
 export const SELECTABLE_TAGS: readonly string[] = CATALOGUE.map((language) => language.tag);
@@ -90,10 +105,17 @@ export const SELECTABLE_TAGS: readonly string[] = CATALOGUE.map((language) => la
 export interface ThinkingSettings {
 	/** Selected language tag, or {@link AUTO}. / 所选语言标签，或 {@link AUTO}。 */
 	language: string;
+	/**
+	 * Minutes between reminders: {@link REMINDER_OFF} disables them,
+	 * {@link REMINDER_EVERY_TURN} injects on every turn, and 1–1440 is a minimum gap.
+	 * 提醒间隔（分钟）：{@link REMINDER_OFF} 关闭，{@link REMINDER_EVERY_TURN} 每轮
+	 * 注入，1–1440 为最小间隔。
+	 */
+	reminderMinutes: number;
 }
 
-/** Configuration applied when the field is absent. / 字段缺失时采用的配置。 */
-export const DEFAULTS: ThinkingSettings = { language: AUTO };
+/** Configuration applied when the fields are absent. / 字段缺失时采用的配置。 */
+export const DEFAULTS: ThinkingSettings = { language: AUTO, reminderMinutes: DEFAULT_REMINDER_MINUTES };
 
 /** A minimal read handle over the host settings service. / 宿主设置服务的最小读取句柄。 */
 export interface Reader {
@@ -202,10 +224,35 @@ function tagForLocale(raw: unknown): string | undefined {
  * Coerce an untrusted settings section into a complete configuration.
  * 把不可信的设置段强制转换为完整配置。
  */
+/** Clamp one untrusted reminder value into the accepted range; any negative value disables it. / 把不可信的提醒值收敛到允许范围；负数一律视为关闭。 */
+function normalizeReminder(raw: unknown): number {
+	const numeric = typeof raw === "number" ? raw : typeof raw === "string" && raw.trim() !== "" ? Number(raw) : NaN;
+	if (!Number.isFinite(numeric)) return DEFAULT_REMINDER_MINUTES;
+	const rounded = Math.round(numeric);
+	if (rounded < 0) return REMINDER_OFF;
+	return rounded > MAX_REMINDER_MINUTES ? MAX_REMINDER_MINUTES : rounded;
+}
+
+/**
+ * Convert stored minutes into the minimum gap between reminders.
+ * 把存储的分钟数换算成两次提醒之间的最小间隔。
+ *
+ * Returns {@link REMINDER_OFF} when the reminder is disabled and `0` when it runs
+ * on every turn. / 关闭时返回 {@link REMINDER_OFF}，每轮注入时返回 `0`。
+ */
+export function reminderDelayMs(minutes: number): number {
+	if (minutes < 0) return REMINDER_OFF;
+	if (minutes === REMINDER_EVERY_TURN) return 0;
+	return minutes * 60_000;
+}
+
 export function normalizeSettings(raw: unknown): ThinkingSettings {
-	const isSection = raw !== null && typeof raw === "object" && !Array.isArray(raw);
-	const stored = isSection ? (raw as Record<string, unknown>)[FIELD_LANGUAGE] : undefined;
-	return { language: typeof stored === "string" && stored !== "" ? stored : DEFAULTS.language };
+	const section = raw !== null && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : undefined;
+	const stored = section?.[FIELD_LANGUAGE];
+	return {
+		language: typeof stored === "string" && stored !== "" ? stored : DEFAULTS.language,
+		reminderMinutes: normalizeReminder(section?.[FIELD_REMINDER])
+	};
 }
 
 /**

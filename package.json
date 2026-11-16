@@ -1,6 +1,6 @@
 {
   "name": "dsh-thinking-lang",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "DSH plugin: set the agent's reasoning language (Settings → General)",
   "license": "MIT",
   "repository": {
@@ -39,6 +39,7 @@
     "assets",
     "cordis.patch.yml",
     "README.md",
+    "DEVELOPMENT.md",
     "PROVENANCE.md",
     "LICENSE"
   ],

@@ -10,10 +10,13 @@
  */
 import { SETTINGS_NAMESPACE } from "../core.js";
 import { dictionaries, type Dict } from "./locales.js";
-import { createRow, mountRowStyles, type SettingsDoc, type UiPrimitives } from "./panel.js";
+import { createConfigCard, createRow, mountRowStyles, type SettingsDoc, type UiPrimitives } from "./panel.js";
 
 /** Stable Cordis plugin name. / 稳定的 Cordis 插件名。 */
 export const name = "ay-dsh-tk-lang";
+
+/** Package name; the key Plugins page uses to find a bundle's configuration page. / 包名；插件页用它查找某个 bundle 的配置页。 */
+const PACKAGE_NAME = "dsh-thinking-lang";
 
 /** The one client service this plugin requires. / 本插件唯一需要的客户端服务。 */
 export const inject = ["slots"];
@@ -36,6 +39,8 @@ declare const require: (specifier: string) => unknown;
 /** The slice of the config-forms service used to reach the settings document. / 用于取得设置文档的 config-forms 服务切片。 */
 interface ConfigFormsService {
 	get(ns: string): SettingsDoc;
+	/** Run `callback` while the namespace is served; returns its disposer. / 命名空间处于服务状态时执行回调，返回其回收函数。 */
+	whileServed?(namespaces: string[], callback: () => unknown): () => void;
 }
 
 /** The slice of the locale service used for row copy. / 用于行文案的 locale 服务切片。 */
@@ -126,5 +131,31 @@ export function apply(ctx: UiContext): void {
 				Row
 			);
 		});
+
+		// The Plugins page renders a bundle's configuration through this slot,
+		// keyed by the package name. / 插件页按包名通过该插槽渲染 bundle 的配置页。
+		const whileServed = typeof forms.whileServed === "function" ? forms.whileServed.bind(forms) : undefined;
+		if (whileServed === undefined) {
+			report(uiCtx, "configForms.whileServed unavailable; plugin configuration page disabled");
+			return;
+		}
+		const Card = createConfigCard(primitives);
+		uiCtx.effect(
+			() =>
+				whileServed([SETTINGS_NAMESPACE], () =>
+					uiCtx.slots.inject("plugins.bundle.config", () =>
+						uiCtx.slots.register(
+							{
+								name: "plugins.bundle.config",
+								key: PACKAGE_NAME,
+								locale: LOCALE_NS,
+								inject: () => ({ doc, t })
+							},
+							Card
+						)
+					)
+				),
+			"dsh-thinking-lang: plugin configuration page"
+		);
 	});
 }

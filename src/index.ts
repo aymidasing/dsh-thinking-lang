@@ -6,10 +6,10 @@
  * 注入形态（设计理由见 README）：
  *
  *   section  order  1  →  the authoritative rule, once per session
- *   pre-step step 1  →  a short reminder, at most once per turn (10 min apart)
+ *   pre-step step 1  →  a short reminder, at most once per turn (interval configurable, default 30 min)
  *
  *   section  order  1  →  权威规则，每会话组装一次
- *   pre-step step 1  →  短提醒，每轮最多一次（间隔 10 分钟）
+ *   pre-step step 1  →  短提醒，每轮最多一次（间隔可配置，默认 30 分钟）
  *
  * The host context is described by a local structural interface rather than the
  * `@deepseek-ai/cordis` type, so this package carries no DSH type dependency.
@@ -20,7 +20,10 @@ import { randomUUID } from "node:crypto";
 import z from "@deepseek-ai/schemastery";
 import {
 	AUTO,
+	DEFAULT_REMINDER_MINUTES,
 	FIELD_LANGUAGE,
+	FIELD_REMINDER,
+	REMINDER_OFF,
 	SELECTABLE_TAGS,
 	SETTINGS_NAMESPACE,
 	type Reader,
@@ -28,6 +31,7 @@ import {
 	effectiveCode,
 	nativeNameFor,
 	normalizeSettings,
+	reminderDelayMs,
 	reminderText,
 	sectionText
 } from "./core.js";
@@ -46,9 +50,6 @@ export const inject: string[] = [];
  * persona 前缀放在 0、第一个策略段放在 500，因此取 1 就紧跟在 persona 那行之后。
  */
 const SECTION_ORDER = 1;
-
-/** Minimum milliseconds between two per-turn reminders in one session. / 同一会话中两次每轮提醒之间的最小毫秒数。 */
-const REMINDER_INTERVAL_MS = 600_000;
 
 /** Settings namespace holding the desktop UI locale. / 保存桌面 UI 语言的设置命名空间。 */
 const LOCALE_NAMESPACE = "locale";
@@ -118,7 +119,10 @@ function labelled<T>(node: z<T>, label: string | undefined): z<T> {
  */
 function buildSchema(): z<ThinkingSettings> {
 	const choices = [AUTO, ...SELECTABLE_TAGS].map((value) => labelled(z.const(value), nativeNameFor(value)));
-	return z.object({ [FIELD_LANGUAGE]: live(z.union(choices).default(AUTO)) });
+	return z.object({
+		[FIELD_LANGUAGE]: live(z.union(choices).default(AUTO)),
+		[FIELD_REMINDER]: live(z.number().default(DEFAULT_REMINDER_MINUTES))
+	});
 }
 
 /** Durable settings schema; the field defaults to {@link AUTO}. / 持久化设置 schema；字段默认为 {@link AUTO}。 */
@@ -261,13 +265,16 @@ function osLocale(): string | undefined {
 }
 
 /**
- * Resolve the effective language for one prompt build.
- * 为一次提示词构建解析出生效语言。
+ * Resolve the configuration in effect for one prompt build.
+ * 为一次提示词构建解析出当前生效的配置。
  */
-function currentLanguage(reader: Reader): string {
+function currentSettings(reader: Reader): ThinkingSettings {
 	const settings = normalizeSettings(sectionOf(reader, SETTINGS_NAMESPACE));
 	const desktop = sectionOf(reader, LOCALE_NAMESPACE)?.[LOCALE_FIELD];
-	return effectiveCode(settings, osLocale(), typeof desktop === "string" ? desktop : undefined);
+	return {
+		...settings,
+		language: effectiveCode(settings, osLocale(), typeof desktop === "string" ? desktop : undefined)
+	};
 }
 
 /** One pre-step payload slice this entry reads. / 本入口读取的 pre-step 载荷切片。 */
@@ -332,7 +339,7 @@ export function apply(ctx: HostContext): void {
 		promptCtx.systemPrompt.section({
 			name: "app:tk-lang",
 			order: SECTION_ORDER,
-			text: () => sectionText(currentLanguage(reader()))
+			text: () => sectionText(currentSettings(reader()).language)
 		});
 
 		// The reminder runs before the other pre-step listeners, so its message is
@@ -341,10 +348,13 @@ export function apply(ctx: HostContext): void {
 		promptCtx.on("agent/pre-step", async (payload, next) => {
 			const decision = await next();
 			if (decision.kind !== "enter" || payload.signal.aborted || payload.step !== 1) return decision;
+			const settings = currentSettings(reader());
+			const delay = reminderDelayMs(settings.reminderMinutes);
+			if (delay === REMINDER_OFF) return decision;
 			const now = Date.now();
 			const previous = lastReminderAt.get(payload.agent.session.id);
-			if (previous !== undefined && now - previous < REMINDER_INTERVAL_MS) return decision;
-			const text = reminderText(currentLanguage(reader()));
+			if (delay > 0 && previous !== undefined && now - previous < delay) return decision;
+			const text = reminderText(settings.language);
 			if (text === "") return decision;
 			lastReminderAt.set(payload.agent.session.id, now);
 			return { ...decision, messages: [...decision.messages, reminderMessage(text)] };
