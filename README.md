@@ -10,40 +10,6 @@
 
 ---
 
-## 安装
-
-```bash
-dsh plugin --profile desktop add dsh-thinking-lang
-```
-
-也可以把包名 `dsh-thinking-lang` 粘进设置里的插件管理器安装框。执行前请**完全退出桌面端**：`--profile desktop` 操作的 profile 必须已经初始化，且没有进程正占用它。装完重启 GUI。
-
-`main` 分支只有 TypeScript 源码；`lib/` 与 `client/` 是构建产物。安装走 npm 包，或 [Release 附件](https://github.com/aymidasing/dsh-thinking-lang/releases/latest)（`https://github.com/aymidasing/dsh-thinking-lang/releases/latest/download/dsh-thinking-lang.tgz`），两者都是构建好的成品，装的时候不会触发构建授权。
-
-**更新**：设置 → 插件里点「更新」，或重新执行一次上面的安装命令。npm 依赖记录为 `^1.0.5` 这样的版本范围，能跟随新版本；用 Release 附件装的话依赖以 URL 记录，换版本要重装一次新的附件地址。
-
-**卸载**：
-
-```bash
-dsh plugin --profile desktop remove dsh-thinking-lang
-```
-
-设置里的「思考语言」那一行随之消失，提示词也不再注入。和安装一样，要在桌面端完全退出后执行。
-
-从源码装（开发用）：
-
-```bash
-npm install
-npm run build
-dsh plugin --profile desktop add "$PWD"
-```
-
-**语言约束对新会话生效**；切语言本身在已有会话的下一轮就生效。
-
-> **不要再用 `github:` 安装。** pnpm 11 默认拦下依赖的构建脚本，而 `github:` 源要靠 `prepare` 才产出 `lib/` 与 `client/`，安装会停在 `ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`，除非在 profile 的 `pnpm-workspace.yaml` 里逐名放行 `allowBuilds`。npm 包与 Release 附件都是成品，包里没有 `prepack`/`prepare`，装它不会触发构建授权。
-
----
-
 ## 它做什么
 
 在**设置 → 通用**里新增一行「思考语言」，位于宿主自身的语言设置项下方。整行只有一个下拉框：
@@ -152,6 +118,38 @@ reminder 每轮追加在请求末尾，只新增尾部 Token，不会让已有�
 
 ---
 
+## 安装与卸载
+
+```bash
+dsh plugin --profile desktop add dsh-thinking-lang
+```
+
+也可以把包名贴进设置里的插件管理器。执行前**完全退出桌面端**：`--profile desktop` 操作的 profile 不能被占用；装完重启 GUI。
+
+**更新**：设置 → 插件里点「更新」，或重复上面那条命令。npm 依赖记作 `^1.0.6` 这样的版本范围，能跟随新版本。
+
+**卸载**：
+
+```bash
+dsh plugin --profile desktop remove dsh-thinking-lang
+```
+
+设置里的「思考语言」行随之消失，提示词也不再注入；同样要在桌面端完全退出后执行。
+
+**从源码装（开发用）**：
+
+```bash
+npm install
+npm run build
+dsh plugin --profile desktop add "$PWD"
+```
+
+**语言约束对新会话生效**；切语言本身在已有会话的下一轮就生效。
+
+> **不要用 `github:` 安装。** pnpm 11 会拦下依赖的构建脚本，而 `github:` 源要靠 `prepare` 才产出 `lib/` 与 `client/`，安装会停在 `ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`。npm 包与 [Release 附件](https://github.com/aymidasing/dsh-thinking-lang/releases/latest) 都是构建好的成品，不带 `prepack`/`prepare`，装它不会触发构建授权。
+
+---
+
 ## 构建
 
 ```bash
@@ -183,8 +181,8 @@ Node（构建）需要 `^22.18.0 || >=24.11.0`；插件运行时不依赖本机 
 | [`src/client/locales.ts`](src/client/locales.ts) | 三套行文案（简 / 繁 / 英） |
 | [`cordis.patch.yml`](cordis.patch.yml) | bundle patch，登记宿主入口 |
 | [`PROVENANCE.md`](PROVENANCE.md) | 设置行样式的来源记录，以及从 `app.asar` 读宿主源码的方法（维护用） |
-| `lib/` · `client/` | 构建产物，**不入库**——只随 Release 附件提供；[`package.json`](package.json) 的 `files` 白名单负责把它们打进包 |
-| [`.github/workflows/release.yml`](.github/workflows/release.yml) | tag 触发：构建、校验、上传 Release 附件 |
+| `lib/` · `client/` | 构建产物，**不入库**——由 [`package.json`](package.json) 的 `files` 白名单打进包，随 npm 包和 Release 附件一起发布 |
+| [`.github/workflows/release.yml`](.github/workflows/release.yml) | tag 触发：构建、校验、发布到 npm、上传 Release 附件 |
 | [`scripts/verify-pack.mjs`](scripts/verify-pack.mjs) | 校验附件里带着运行时要加载的文件（构建链的看门人） |
 | [`assets/`](assets/) | README 用的截图；随 npm 包与 Release 附件一起发布，插件详情页按相对路径直接读取 |
 
@@ -199,18 +197,6 @@ Node（构建）需要 `^22.18.0 || >=24.11.0`；插件运行时不依赖本机 
 **不依赖任何 DSH 类型包。** 宿主上下文由 [`src/index.ts`](src/index.ts) 里的本地 `HostContext` 接口结构化描述，所以包里没有 `@deepseek-ai/cordis`（既不是 dependency 也不是 peerDependency）。
 
 宿主端对包只暴露四个导出：`name`、`inject`、`Config`、`apply`——其余全部是模块内私有。
-
-### 设置行文案的语言（预留功能，默认关闭）
-
-设置行的文案**可以**跟随思考语言而不是界面语言——选 繁體中文，这一行的标题与说明就变繁体。整套机制已经实现并接线完毕，但**当前不生效**。
-
-| | |
-|---|---|
-| 开关 | [`src/client/locales.ts`](src/client/locales.ts) 里的 `COPY_FOLLOWS_THINKING_LANGUAGE`，默认 `false` |
-| 启用 | 改成 `true` → `npm run build` → 重启 GUI |
-| 还要改别的文件吗 | 不用。三套字典与选取函数 `dictionaryFor` 都在 `locales.ts` 里 |
-
-因为开关是编译期常量，构建时 rolldown 会把这条死分支连同繁体字典一起摇掉——当前产物里没有这些文案，行为与「只跟随界面语言」完全一致。语言选择器的选项始终显示各语言的本族语名（简体中文 / English），所以即使文案换成了你不熟悉的语言，也能从同一个下拉里切回来。
 
 ---
 
