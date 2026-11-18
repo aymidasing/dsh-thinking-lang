@@ -34,8 +34,10 @@ export interface Language {
 	nativeName: string;
 	/** The rule sentence written in this language. / 用本语言写成的规则句。 */
 	section: string;
-	/** The short per-turn reminder written in this language. / 用本语言写成的每轮短提醒。 */
+	/** The short reminder written in this language for the head of the batch. / 写在批次开头的短提醒。 */
 	reminder: string;
+	/** The short reminder written for the last message of the request. / 写在请求末尾的短提醒。 */
+	tail: string;
 }
 
 /**
@@ -55,19 +57,22 @@ export const CATALOGUE: readonly Language[] = [
 		tag: "zh-CN",
 		nativeName: "简体中文",
 		section: "推理规则：思考、推理与规划一律使用简体中文。回复用户时使用用户所用的语言。",
-		reminder: "继续用简体中文思考、推理与规划。"
+		reminder: "注意：思考、推理与规划用简体中文，即使上文不是",
+		tail: "下文请使用简体中文思考"
 	},
 	{
 		tag: "zh-TW",
 		nativeName: "繁體中文",
 		section: "推理規則：思考、推理與規劃一律使用繁體中文。回覆使用者時使用使用者所用的語言。",
-		reminder: "繼續用繁體中文思考、推理與規劃。"
+		reminder: "注意：思考、推理與規劃用繁體中文，即使上文不是",
+		tail: "下文請使用繁體中文思考"
 	},
 	{
 		tag: "en",
 		nativeName: "English",
 		section: "Reasoning rules: think, reason, and plan in English. Reply to the user in the language they use.",
-		reminder: "Keep thinking, reasoning, and planning in English."
+		reminder: "Note: think, reason, and plan in English, even if the text above is not",
+		tail: "Think in English from here on"
 	}
 ];
 
@@ -85,6 +90,9 @@ export const FIELD_LANGUAGE = "language";
 
 /** The reminder field this plugin stores. / 本插件保存的提醒字段。 */
 export const FIELD_REMINDER = "reminderMinutes";
+
+/** The extra-injection field this plugin stores. / 本插件保存的额外注入字段。 */
+export const FIELD_EXTRA = "extraInjection";
 
 /** Reminder value that disables the per-turn reminder. / 关闭每轮提醒的取值。 */
 export const REMINDER_OFF = -1;
@@ -112,10 +120,20 @@ export interface ThinkingSettings {
 	 * 注入，1–1440 为最小间隔。
 	 */
 	reminderMinutes: number;
+	/**
+	 * Whether the closing rule is also folded into the skill catalogue. It only
+	 * applies while the reminder is on.
+	 * 是否把收尾规则同时折进技能目录；仅在提醒开启时生效。
+	 */
+	extraInjection: boolean;
 }
 
 /** Configuration applied when the fields are absent. / 字段缺失时采用的配置。 */
-export const DEFAULTS: ThinkingSettings = { language: AUTO, reminderMinutes: DEFAULT_REMINDER_MINUTES };
+export const DEFAULTS: ThinkingSettings = {
+	language: AUTO,
+	reminderMinutes: DEFAULT_REMINDER_MINUTES,
+	extraInjection: true
+};
 
 /** A minimal read handle over the host settings service. / 宿主设置服务的最小读取句柄。 */
 export interface Reader {
@@ -233,6 +251,11 @@ function normalizeReminder(raw: unknown): number {
 	return rounded > MAX_REMINDER_MINUTES ? MAX_REMINDER_MINUTES : rounded;
 }
 
+/** Coerce one untrusted extra-injection value; only an explicit false turns it off. / 把不可信的额外注入值收敛为布尔；只有明确的 false 视为关闭。 */
+function normalizeExtra(raw: unknown): boolean {
+	return raw !== false && raw !== "false";
+}
+
 /**
  * Convert stored minutes into the minimum gap between reminders.
  * 把存储的分钟数换算成两次提醒之间的最小间隔。
@@ -251,7 +274,8 @@ export function normalizeSettings(raw: unknown): ThinkingSettings {
 	const stored = section?.[FIELD_LANGUAGE];
 	return {
 		language: typeof stored === "string" && stored !== "" ? stored : DEFAULTS.language,
-		reminderMinutes: normalizeReminder(section?.[FIELD_REMINDER])
+		reminderMinutes: normalizeReminder(section?.[FIELD_REMINDER]),
+		extraInjection: normalizeExtra(section?.[FIELD_EXTRA])
 	};
 }
 
@@ -296,4 +320,12 @@ export function sectionText(code: string): string {
  */
 export function reminderText(code: string): string {
 	return languageOf(code)?.reminder ?? "";
+}
+
+/**
+ * Build the closing reminder appended as the request's last message.
+ * 生成追加在请求最后一条消息里的收尾提醒。
+ */
+export function tailText(code: string): string {
+	return languageOf(code)?.tail ?? "";
 }

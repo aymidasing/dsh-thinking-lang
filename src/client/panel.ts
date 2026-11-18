@@ -9,11 +9,13 @@
  * The row owns no state of its own: it reads the document, subscribes to it, and
  * writes the fields back. / 控件不持有自己的状态：读取文档、订阅变化、回写字段。
  */
+// @ts-ignore React's runtime is supplied by the host, which does not ship its type declarations.
 import { createElement as h, useEffect, useState } from "react";
 import {
 	AUTO,
 	CATALOGUE,
 	DEFAULTS,
+	FIELD_EXTRA,
 	FIELD_LANGUAGE,
 	FIELD_REMINDER,
 	MAX_REMINDER_MINUTES,
@@ -269,6 +271,59 @@ function createReminderPicker(primitives: UiPrimitives | undefined) {
 }
 
 /**
+ * Build the extra-injection picker: on or off.
+ * 构建额外注入选择器：开启或关闭。
+ *
+ * It shares the host Menu with the other controls, so the three read as one column.
+ * 与另外两个控件共用宿主 Menu，三者在视觉上成一列。
+ */
+function createExtraPicker(primitives: UiPrimitives | undefined) {
+	const Menu = primitives?.Menu;
+	const Chevron =
+		primitives?.IconChevronDownOutlineRegular ??
+		primitives?.IconChevronDownOutline14 ??
+		primitives?.IconChevronDownOutlineMedium;
+
+	return function ExtraPicker(props: Binding & { settings: ThinkingSettings; disabled?: boolean }): unknown {
+		const { doc, t, settings, disabled = false } = props;
+		const [open, setOpen] = useState<boolean>(false);
+		const items = [
+			{ id: "on", label: t("extraOn") },
+			{ id: "off", label: t("extraOff") }
+		];
+		const close = (): void => setOpen(false);
+		const choose = (id: string): void => {
+			writeField(doc, FIELD_EXTRA, id === "on");
+			close();
+		};
+		const picker = h(
+			"button",
+			{
+				type: "button",
+				className: "dsh_desk_lang_picker",
+				"aria-haspopup": "menu",
+				"aria-expanded": open,
+				disabled,
+				onClick: (): void => setOpen((value: boolean) => !value)
+			},
+			settings.extraInjection ? t("extraOn") : t("extraOff"),
+			Chevron === undefined ? null : h(Chevron, { className: "dsh_desk_lang_chevron" })
+		);
+		if (!Menu) return picker;
+		return h(Menu, {
+			open,
+			anchor: picker,
+			items,
+			selectedId: settings.extraInjection ? "on" : "off",
+			align: "end",
+			portal: true,
+			onClose: close,
+			onSelect: choose
+		});
+	};
+}
+
+/**
  * Build the General settings row: heading, description and the language picker.
  * 构建「通用」设置行：标题、说明与语言选择器。
  */
@@ -302,10 +357,15 @@ export function createRow(primitives: UiPrimitives | undefined): (props: Binding
 export function createConfigCard(primitives: UiPrimitives | undefined): (props: Binding & { view?: string }) => unknown {
 	const LanguagePicker = createLanguagePicker(primitives);
 	const ReminderPicker = createReminderPicker(primitives);
+	const ExtraPicker = createExtraPicker(primitives);
 	return function ThinkingLanguageCard(props: Binding & { view?: string }): unknown {
 		const settings = useSettings(props.doc);
 		if (props.view === "summary") return null;
 		const binding = { doc: props.doc, t: props.t, settings };
+		// Turning the reminder off stops both injections, so the extra-injection
+		// control greys out instead of accepting a value that cannot take effect.
+		// 提醒关闭时两处注入都会停，因此额外注入控件置灰，而不是让一个不生效的取值可选。
+		const reminderOff = settings.reminderMinutes < 0;
 		return h(
 			"div",
 			null,
@@ -330,6 +390,17 @@ export function createConfigCard(primitives: UiPrimitives | undefined): (props: 
 					h("div", { className: "dsh_desk_lang_desc" }, props.t("reminderDescription"))
 				),
 				h(ReminderPicker, binding)
+			),
+			h(
+				"div",
+				{ className: reminderOff ? "dsh_desk_lang_row dsh_desk_lang_row_disabled" : "dsh_desk_lang_row" },
+				h(
+					"div",
+					{ className: "dsh_desk_lang_text" },
+					h("div", { className: "dsh_desk_lang_title" }, props.t("extraHeading")),
+					h("div", { className: "dsh_desk_lang_desc" }, props.t("extraDescription"))
+				),
+				h(ExtraPicker, { ...binding, disabled: reminderOff })
 			)
 		);
 	};
@@ -344,6 +415,7 @@ export function createConfigCard(primitives: UiPrimitives | undefined): (props: 
 // 选择器末尾多一个宿主不需要的 `flex:none`；除此之外逐字符一致。
 const rowCss = [
 	".dsh_desk_lang_row{border-bottom:.5px solid var(--dsw-alias-border-l2);align-items:center;gap:8px;padding:16px 0;display:flex}",
+	".dsh_desk_lang_row_disabled{opacity:.45;pointer-events:none}",
 	".dsh_desk_lang_text{flex-direction:column;flex:1;gap:4px;min-width:0;padding-right:48px;display:flex}",
 	".dsh_desk_lang_title{color:var(--dsw-alias-label-primary);font-size:14px;font-weight:400;line-height:22px}",
 	".dsh_desk_lang_desc{color:var(--dsw-alias-label-tertiary);font-size:12px;font-weight:400;line-height:18px}",

@@ -21,6 +21,8 @@ import z from "@deepseek-ai/schemastery";
 import {
 	AUTO,
 	DEFAULT_REMINDER_MINUTES,
+	DEFAULTS,
+	FIELD_EXTRA,
 	FIELD_LANGUAGE,
 	FIELD_REMINDER,
 	REMINDER_OFF,
@@ -33,6 +35,7 @@ import {
 	normalizeSettings,
 	reminderDelayMs,
 	reminderText,
+	tailText,
 	sectionText
 } from "./core.js";
 
@@ -121,7 +124,8 @@ function buildSchema(): z<ThinkingSettings> {
 	const choices = [AUTO, ...SELECTABLE_TAGS].map((value) => labelled(z.const(value), nativeNameFor(value)));
 	return z.object({
 		[FIELD_LANGUAGE]: live(z.union(choices).default(AUTO)),
-		[FIELD_REMINDER]: live(z.number().default(DEFAULT_REMINDER_MINUTES))
+		[FIELD_REMINDER]: live(z.number().default(DEFAULT_REMINDER_MINUTES)),
+		[FIELD_EXTRA]: live(z.boolean().default(DEFAULTS.extraInjection))
 	});
 }
 
@@ -300,6 +304,7 @@ interface HostContext {
 		listener: (payload: PreStepPayload, next: () => Promise<PreStepDecision>) => Promise<PreStepDecision>,
 		options?: { prepend?: boolean }
 	): unknown;
+	on(event: "agent/created", listener: (payload: unknown) => unknown): unknown;
 	systemPrompt: {
 		section(section: { name: string; order?: number; text: () => string }): unknown;
 	};
@@ -323,6 +328,40 @@ function reminderMessage(text: string): Record<string, unknown> {
 }
 
 /**
+ * Put the rule in front of the text a message already carries.
+ * 把规则放到消息已有文本的前面。
+ */
+function prefixPrompt(message: Record<string, unknown>, text: string): Record<string, unknown> {
+	const content = Array.isArray(message.content) ? (message.content as Array<Record<string, unknown>>) : [];
+	const head = content[0];
+	if (head && head.type === "text" && typeof head.text === "string" && head.text.startsWith(text)) return message;
+	return { ...message, content: [{ type: "text", text: `${text}\n` }, ...content] };
+}
+
+/**
+ * Rewrite the skill-catalog injection so the rule opens a block the model reads as
+ * instruction, not as the text it has to answer. Falls back to the last injected
+ * message when no skill catalogue is present. / 改写 skill-catalog 注入，让规则出现在
+ * 模型读作指令的块开头；没有技能目录时退回最后一条注入消息。
+ */
+function prefixInjected(messages: Array<Record<string, unknown>>, text: string): Array<Record<string, unknown>> {
+	let index = messages.findIndex((message) => (message.source as { kind?: unknown } | undefined)?.kind === "skill-catalog");
+	if (index < 0) {
+		for (let cursor = messages.length - 1; cursor >= 0; cursor -= 1) {
+			const source = messages[cursor].source as { kind?: unknown } | undefined;
+			if (messages[cursor].role === "user" && source?.kind !== name) {
+				index = cursor;
+				break;
+			}
+		}
+	}
+	if (index < 0) return messages;
+	const next = [...messages];
+	next[index] = prefixPrompt(messages[index], text);
+	return next;
+}
+
+/**
  * Register the settings consumer, the prompt section, and the per-turn reminder.
  * 注册设置消费方、提示词段，以及每轮一次的提醒。
  */
@@ -342,10 +381,11 @@ export function apply(ctx: HostContext): void {
 			text: () => sectionText(currentSettings(reader()).language)
 		});
 
-		// The reminder runs before the other pre-step listeners, so its message is
-		// appended after theirs and stays closest to the end of the request.
-		// 该提醒先于其它 pre-step 监听器执行，因此它的消息追加在它们之后，离请求末尾最近。
-		promptCtx.on("agent/pre-step", async (payload, next) => {
+		/**
+		 * Wrap the batch in two reminders: one before the prompt, one after every injection.
+		 * 用两条提醒夹住批次：一条在提问之前，一条在全部注入之后。
+		 */
+		const rewrite = async (payload: PreStepPayload, next: () => Promise<PreStepDecision>) => {
 			const decision = await next();
 			if (decision.kind !== "enter" || payload.signal.aborted || payload.step !== 1) return decision;
 			const settings = currentSettings(reader());
@@ -354,10 +394,32 @@ export function apply(ctx: HostContext): void {
 			const now = Date.now();
 			const previous = lastReminderAt.get(payload.agent.session.id);
 			if (delay > 0 && previous !== undefined && now - previous < delay) return decision;
-			const text = reminderText(settings.language);
-			if (text === "") return decision;
+			const head = reminderText(settings.language);
+			if (head === "") return decision;
 			lastReminderAt.set(payload.agent.session.id, now);
-			return { ...decision, messages: [...decision.messages, reminderMessage(text)] };
-		}, { prepend: true });
+			// The closing rule rides on the same switch as the reminder: turning the
+			// reminder off skips this whole listener, so both injections stop together.
+			// 收尾规则与提醒共用一个开关：提醒关闭时本段不执行，两处注入一起停。
+			const tail = settings.extraInjection ? tailText(settings.language) : "";
+			const messages = tail === "" ? decision.messages : prefixInjected(decision.messages, tail);
+			return { ...decision, messages: [reminderMessage(head), ...messages] };
+		};
+
+		/**
+		 * `prepend` unshifts, so the listener prepended last runs first and returns last:
+		 * only it sees every message the other pre-step listeners appended, including the
+		 * trailing `time-context` batch.
+		 * `prepend` 是 unshift：最后 prepend 的监听器最先执行、最后返回，只有它能看见其它
+		 * pre-step 监听器追加的全部消息，包括压在最后的 `time-context`。
+		 */
+		let disposeStep: (() => void) | undefined;
+		const bindOutermost = (): void => {
+			disposeStep?.();
+			disposeStep = promptCtx.on("agent/pre-step", rewrite, { prepend: true }) as () => void;
+		};
+		bindOutermost();
+		promptCtx.on("agent/created", () => {
+			bindOutermost();
+		});
 	});
 }

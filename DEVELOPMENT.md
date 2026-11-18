@@ -22,13 +22,13 @@
 
 | 语言 | section（规则句） | reminder（每轮提醒） |
 |---|---|---|
-| 简体中文 | 推理规则：思考、推理与规划一律使用简体中文。回复用户时使用用户所用的语言。 | 继续用简体中文思考、推理与规划。 |
-| 繁體中文 | 推理規則：思考、推理與規劃一律使用繁體中文。回覆使用者時使用使用者所用的語言。 | 繼續用繁體中文思考、推理與規劃。 |
-| English | Reasoning rules: think, reason, and plan in English. Reply to the user in the language they use. | Keep thinking, reasoning, and planning in English. |
+| 简体中文 | 推理规则：思考、推理与规划一律使用简体中文。回复用户时使用用户所用的语言。 | 思考、推理与规划用简体中文，即使上文不是。 |
+| 繁體中文 | 推理規則：思考、推理與規劃一律使用繁體中文。回覆使用者時使用使用者所用的語言。 | 思考、推理與規劃用繁體中文，即使上文不是。 |
+| English | Reasoning rules: think, reason, and plan in English. Reply to the user in the language they use. | Think, reason, and plan in English, even if the text above is not. |
 
 改文本改 `CATALOGUE`，再 `npm run build`。
 
-section 的 `order: 1` 紧跟 persona；提醒消息经 `prepend` 注册，落在请求最末（晚于 time-context 等注入）。
+section 的 `order: 1` 紧跟 persona。提醒分两处：一条独立消息插在批次最前，另一条折进 `skill-catalog` 块的 `content` 首部。`agent/pre-step` 监听器在 `agent/created` 时重新 `prepend`，所以它排在监听链最外层，能看到其余注入追加完再动手。
 
 ### 提醒间隔
 
@@ -42,19 +42,38 @@ section 的 `order: 1` 紧跟 persona；提醒消息经 `prepend` 注册，落�
 
 宿主端由 [`reminderDelayMs`](src/core.ts) 换算；客户端在插件详情页的配置卡片里修改，两处读写同一份设置文档。
 
+### 额外提醒注入
+
+存储字段是 `extraInjection`（布尔，默认 `true`）。开启时把 `skill-catalog` 块的 `content[0]` 换成「下文请使用简体中文思考」（按所选语言书写），模型因此在那段上下文里先读到规则、再读技能列表。
+
+它跟着提醒间隔联动：`reminderMinutes` 为负数时，整个 `agent/pre-step` 监听器提前返回，两处注入一起停；客户端对应地把这一行置灰。
+
 ---
 
 ## Token 开销（实测）
 
 用 DeepSeek V4 词表实测（不计特殊 token）：
 
-| 语言 | section | reminder |
-|---|---|---|
-| 简体中文 | 21 | 10 |
-| 繁體中文 | 22 | 10 |
-| English | 23 | 10 |
+| 语言 | section（每会话一次） | 前置提醒（每提醒轮次） | 额外提醒（每提醒轮次） |
+|---|---|---|---|
+| 简体中文 | 21 | 14 | 6 |
+| 繁體中文 | 22 | 14 | 6 |
+| English | 23 | 18 | 6 |
 
-section 每会话一次；reminder 每个轮次最多一条，按默认 30 分钟间隔计，一小时最多两条，100 轮约 1000 token。**换语言对每轮开销几乎没有影响**。
+前置提醒是一条独立的用户消息，额外提醒只改 `skill-catalog` 的 `content[0]`、不新增消息，所以后者便宜。按默认 30 分钟间隔、100 轮算，一个会话约 50 次提醒、合计约 1000–1300 token。**换语言对每轮开销几乎没有影响**。
+
+旧版只有一条 10 token 的提醒；现在为了压住英文正文拆成 14 + 6（简体中文）。
+
+### 效果数据
+
+2026-11-18 实测，prompt 固定为「英文开场 + 中文测试句结尾」：
+
+| 做法 | 按所选语言思考 |
+|---|---|
+| 系统提示 + 前置提醒 | 约 30% |
+| 再加额外提醒注入 | 约 70%（30 个样本 21 中） |
+
+样本：单注入 10 个、双注入 60 个；同一配置重复跑波动在 7 个百分点以内。**注入提高概率，不保证结果**——用户消息首行就是所选语言时基本不受影响。
 
 ---
 
@@ -154,3 +173,5 @@ dsh plugin --profile desktop add "$PWD"
 - **没有聊天命令**：切换语言只走设置页。如需 `/thinking-language`，可参照 `dsh-thinking-language` 的命令实现补上。
 - **`auto` 依赖运行时能报出系统语言**：Linux/macOS 走环境变量，Windows 走 `Intl`。两者都拿不到时会静默落到界面语言，再不行才是 `zh-CN`。
 - **插件 id 与设置命名空间**：两者都是 `ay-dsh-tk-lang`，占的是一套自有命名；包名 `dsh-thinking-lang` 与 `dsh-thinking-language` 这类仍然相似，注意区分。功能重复的插件同时装上时，设置页会各插一行、各自注入提示词。
+- **注入只提高概率，不保证结果**：用户消息首行不是所选语言（英文开场、纯图片或附件）时，实测约 30%（仅前置提醒）/ 70%（含额外注入）按所选语言思考。需要稳定拿到目标语言的思考内容，请改用官方思考过程翻译插件。
+- **额外注入依赖 `skill-catalog` 块**：会话里没有技能目录时，规则改插在最后一条注入消息的 `content` 首部，位置与效果都可能不同。

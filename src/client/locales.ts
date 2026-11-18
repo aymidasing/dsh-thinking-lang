@@ -29,6 +29,14 @@ export interface Dict {
 	reminderUnit: string;
 	/** Hint under the custom interval input. / 自定义间隔输入框的提示。 */
 	reminderCustomHint: string;
+	/** Extra-injection row heading. / 额外注入行的标题。 */
+	extraHeading: string;
+	/** Extra-injection row description. / 额外注入行的说明。 */
+	extraDescription: string;
+	/** Label of the enabled option. / 开启选项的标签。 */
+	extraOn: string;
+	/** Label of the disabled option. / 关闭选项的标签。 */
+	extraOff: string;
 }
 
 /** Simplified Chinese copy. / 简体中文文案。 */
@@ -42,7 +50,11 @@ export const zh: Dict = {
 	reminderTurn: "每轮",
 	reminderCustom: "自定义",
 	reminderUnit: "分钟",
-	reminderCustomHint: "1–1440 分钟"
+	reminderCustomHint: "1–1440 分钟",
+	extraHeading: "额外提醒注入",
+	extraDescription: "开启后把提醒同时并入技能目录；提醒间隔为「关闭」时，此项也一并关闭。",
+	extraOn: "开启",
+	extraOff: "关闭"
 };
 
 /** English copy. / 英文文案。 */
@@ -57,7 +69,12 @@ export const en: Dict = {
 	reminderTurn: "Every turn",
 	reminderCustom: "Custom",
 	reminderUnit: "min",
-	reminderCustomHint: "1–1440 minutes"
+	reminderCustomHint: "1–1440 minutes",
+	extraHeading: "Extra reminder injection",
+	extraDescription:
+		"Also folds the reminder into the skill catalogue. Switching the reminder interval off turns this off too.",
+	extraOn: "On",
+	extraOff: "Off"
 };
 
 /** Dictionaries keyed by UI locale, handed to the host locale service. / 以界面语言为键、交给宿主 locale 服务的字典。 */
