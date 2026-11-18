@@ -6,10 +6,14 @@
  * 注入形态（设计理由见 README）：
  *
  *   section  order  1  →  the authoritative rule, once per session
- *   pre-step step 1  →  a short reminder, at most once per turn (interval configurable, default 30 min)
+ *   pre-step step 1  →  a short reminder at the head of the batch, at most once per turn
+ *                        (interval configurable, default 30 min)
+ *   pre-step step 1  →  the closing rule, folded into the skill catalogue when the
+ *                        extra-injection setting is on
  *
  *   section  order  1  →  权威规则，每会话组装一次
- *   pre-step step 1  →  短提醒，每轮最多一次（间隔可配置，默认 30 分钟）
+ *   pre-step step 1  →  批次开头的短提醒，每轮最多一次（间隔可配置，默认 30 分钟）
+ *   pre-step step 1  →  收尾规则，额外注入开启时折进技能目录
  *
  * The host context is described by a local structural interface rather than the
  * `@deepseek-ai/cordis` type, so this package carries no DSH type dependency.

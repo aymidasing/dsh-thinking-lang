@@ -9,7 +9,6 @@
  * The row owns no state of its own: it reads the document, subscribes to it, and
  * writes the fields back. / 控件不持有自己的状态：读取文档、订阅变化、回写字段。
  */
-// @ts-ignore React's runtime is supplied by the host, which does not ship its type declarations.
 import { createElement as h, useEffect, useState } from "react";
 import {
 	AUTO,

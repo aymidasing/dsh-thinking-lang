@@ -5,5 +5,7 @@
 node_modules/
 /lib/
 /client/
+# npm pack 的产物：由 release 工作流在 CI 上生成，不入库。
+/*.tgz
 *.log
 .DS_Store

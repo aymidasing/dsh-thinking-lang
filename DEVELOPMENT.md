@@ -20,11 +20,11 @@
 
 文本由 [`src/core.ts`](src/core.ts) 的 `CATALOGUE` 提供，每种语言一份、**用该语言书写**：
 
-| 语言 | section（规则句） | reminder（每轮提醒） |
-|---|---|---|
-| 简体中文 | 推理规则：思考、推理与规划一律使用简体中文。回复用户时使用用户所用的语言。 | 思考、推理与规划用简体中文，即使上文不是。 |
-| 繁體中文 | 推理規則：思考、推理與規劃一律使用繁體中文。回覆使用者時使用使用者所用的語言。 | 思考、推理與規劃用繁體中文，即使上文不是。 |
-| English | Reasoning rules: think, reason, and plan in English. Reply to the user in the language they use. | Think, reason, and plan in English, even if the text above is not. |
+| 语言 | section（规则句） | reminder（批次开头） | tail（请求末尾） |
+|---|---|---|---|
+| 简体中文 | 推理规则：思考、推理与规划一律使用简体中文。回复用户时使用用户所用的语言。 | 注意：思考、推理与规划用简体中文，即使上文不是 | 下文请使用简体中文思考 |
+| 繁體中文 | 推理規則：思考、推理與規劃一律使用繁體中文。回覆使用者時使用使用者所用的語言。 | 注意：思考、推理與規劃用繁體中文，即使上文不是 | 下文請使用繁體中文思考 |
+| English | Reasoning rules: think, reason, and plan in English. Reply to the user in the language they use. | Note: think, reason, and plan in English, even if the text above is not | Think in English from here on |
 
 改文本改 `CATALOGUE`，再 `npm run build`。
 
@@ -73,7 +73,7 @@ section 的 `order: 1` 紧跟 persona。提醒分两处：一条独立消息插�
 | 系统提示 + 前置提醒 | 约 30% |
 | 再加额外提醒注入 | 约 70%（30 个样本 21 中） |
 
-样本：单注入 10 个、双注入 60 个；同一配置重复跑波动在 7 个百分点以内。**注入提高概率，不保证结果**——用户消息首行就是所选语言时基本不受影响。
+样本：单注入 10 个（3 中）；双注入 40 个（29 中）。同一配置重复跑波动在 7 个百分点以内。**注入提高概率，不保证结果**——用户消息首行就是所选语言时基本不受影响。
 
 ---
 
