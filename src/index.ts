@@ -8,12 +8,12 @@
  *   section  order  1  →  the authoritative rule, once per session
  *   pre-step step 1  →  a short reminder at the head of the batch, at most once per turn
  *                        (interval configurable, default 30 min)
- *   pre-step step 1  →  the closing rule, folded into the skill catalogue when the
- *                        extra-injection setting is on
+ *   pre-step step 1  →  the closing rule, folded into the skill catalogue or sent
+ *                        as its own message when extra injection is on
  *
  *   section  order  1  →  权威规则，每会话组装一次
  *   pre-step step 1  →  批次开头的短提醒，每轮最多一次（间隔可配置，默认 30 分钟）
- *   pre-step step 1  →  收尾规则，额外注入开启时折进技能目录
+ *   pre-step step 1  →  收尾规则，额外注入开启时折进技能目录，或独立发送
  *
  * The host context is described by a local structural interface rather than the
  * `@deepseek-ai/cordis` type, so this package carries no DSH type dependency.
@@ -138,12 +138,12 @@ export const Config = buildSchema();
 
 /** The slice of the host settings service this plugin uses. / 本插件用到的宿主设置服务切片。 */
 interface HostSettings {
-	describe(): unknown;
-	update(entryId: string, patch: Record<string, unknown>): unknown;
+	describe(options: { redactSecrets: boolean }): unknown;
 }
 
 /** One read of the settings document, reusable until its TTL elapses. / 一次设置文档读取，在缓存有效期内可复用。 */
 interface SettingsSnapshot {
+	readonly service: HostSettings;
 	readonly takenAt: number;
 	readonly sections: Map<string, Record<string, unknown>>;
 }
@@ -151,25 +151,13 @@ interface SettingsSnapshot {
 /** Handed back while the settings service is unavailable or unreadable. / 设置服务不可用或读不出时交回的空表。 */
 const NO_SECTIONS: ReadonlyMap<string, Record<string, unknown>> = new Map();
 
-let snapshot: SettingsSnapshot | undefined;
-
-/**
- * Pull every namespace section out of the settings document.
- * 从设置文档里取出各个命名空间的段。
- *
- * A section is a `{ns, value}` entry whose `value` is a plain object; anything
- * else in the listing is not something this plugin can read, so it is skipped
- * rather than coerced.
- * 一个段就是 `value` 为普通对象的 `{ns, value}` 条目；列表里其它形状不是本插件能读
- * 的东西，因此跳过而不做强制转换。
- */
 /**
  * Call `describe()` without letting a throwing host escape.
  * 调用 `describe()`，不让抛异常的宿主逃逸出去。
  */
 function described(settings: HostSettings): unknown {
 	try {
-		return settings.describe();
+		return settings.describe({ redactSecrets: true });
 	} catch {
 		return undefined;
 	}
@@ -190,42 +178,27 @@ function asSection(value: unknown): Record<string, unknown> | undefined {
 	return value as Record<string, unknown>;
 }
 
-function collect(settings: HostSettings): Map<string, Record<string, unknown>> {
-	const found = new Map<string, Record<string, unknown>>();
+function collect(settings: HostSettings): Map<string, Record<string, unknown>> | undefined {
 	const listed = described(settings);
-	if (!Array.isArray(listed)) return found;
+	if (!Array.isArray(listed)) return undefined;
+	const found = new Map<string, Record<string, unknown>>();
 	for (const item of listed) {
-		const { ns, value } = item as { ns?: unknown; value?: unknown };
-		const section = asSection(value);
-		if (typeof ns === "string" && section !== undefined) found.set(ns, section);
+		const entry = asSection(item);
+		const ns = entry?.ns;
+		if (ns !== SETTINGS_NAMESPACE && ns !== LOCALE_NAMESPACE) continue;
+		const section = asSection(entry?.value);
+		if (section !== undefined) found.set(ns, section);
 	}
 	return found;
-}
-
-/**
- * Read the namespace sections, reusing one read for a short while.
- * 读取各命名空间的段，并在很短的时间内复用同一次读取。
- *
- * The cache exists because prompt assembly asks on every model step, while
- * `describe()` walks the whole settings document each time.
- * 缓存的存在是因为提示词组装每一步都会问，而 `describe()` 每次都要遍历整份设置文档。
- */
-function sectionsOf(settings: HostSettings | undefined | null): ReadonlyMap<string, Record<string, unknown>> {
-	if (!settings || typeof settings.describe !== "function") return NO_SECTIONS;
-	const now = Date.now();
-	if (snapshot === undefined || now - snapshot.takenAt >= SETTINGS_TTL_MS) {
-		snapshot = { takenAt: now, sections: collect(settings) };
-	}
-	return snapshot.sections;
 }
 
 /**
  * Adapt the settings service to the `get()`-style handle the core reads from.
  * 把设置服务适配成核心代码所用的 `get()` 风格句柄。
  */
-function settingsReader(settings: HostSettings | undefined | null): Reader {
+function settingsReader(sections: ReadonlyMap<string, Record<string, unknown>>): Reader {
 	return {
-		get: (ns?: string) => sectionsOf(settings).get(typeof ns === "string" ? ns : SETTINGS_NAMESPACE)
+		get: (ns = SETTINGS_NAMESPACE) => sections.get(ns)
 	};
 }
 
@@ -309,6 +282,7 @@ interface HostContext {
 		options?: { prepend?: boolean }
 	): unknown;
 	on(event: "agent/created", listener: (payload: unknown) => unknown): unknown;
+	on(event: "settings/document-updated", listener: (namespace: string) => void): unknown;
 	systemPrompt: {
 		section(section: { name: string; order?: number; text: () => string }): unknown;
 	};
@@ -343,23 +317,12 @@ function prefixPrompt(message: Record<string, unknown>, text: string): Record<st
 }
 
 /**
- * Rewrite the skill-catalog injection so the rule opens a block the model reads as
- * instruction, not as the text it has to answer. Falls back to the last injected
- * message when no skill catalogue is present. / 改写 skill-catalog 注入，让规则出现在
- * 模型读作指令的块开头；没有技能目录时退回最后一条注入消息。
+ * Attach the rule to this batch's skill catalogue, or append a plugin-owned message.
+ * 把规则加到当前批次的技能目录，或追加一条标记为本插件来源的消息。
  */
-function prefixInjected(messages: Array<Record<string, unknown>>, text: string): Array<Record<string, unknown>> {
-	let index = messages.findIndex((message) => (message.source as { kind?: unknown } | undefined)?.kind === "skill-catalog");
-	if (index < 0) {
-		for (let cursor = messages.length - 1; cursor >= 0; cursor -= 1) {
-			const source = messages[cursor].source as { kind?: unknown } | undefined;
-			if (messages[cursor].role === "user" && source?.kind !== name) {
-				index = cursor;
-				break;
-			}
-		}
-	}
-	if (index < 0) return messages;
+function withClosingReminder(messages: Array<Record<string, unknown>>, text: string): Array<Record<string, unknown>> {
+	const index = messages.findIndex((message) => asSection(message.source)?.kind === "skill-catalog");
+	if (index < 0) return [...messages, reminderMessage(text)];
 	const next = [...messages];
 	next[index] = prefixPrompt(messages[index], text);
 	return next;
@@ -374,7 +337,24 @@ export function apply(ctx: HostContext): void {
 	const lastReminderAt = new Map<string, number>();
 
 	ctx.inject(["systemPrompt", "settings"], (promptCtx) => {
-		const reader = () => settingsReader(promptCtx.get("settings") as HostSettings | undefined);
+		// A settings write emits this event before acknowledgement. The TTL also
+		// refreshes reads when a host change produced no notification.
+		// 设置写入在应答前发出此事件。TTL 也会刷新未收到通知的变动。
+		let snapshot: SettingsSnapshot | undefined;
+		promptCtx.on("settings/document-updated", (namespace) => {
+			if (namespace === SETTINGS_NAMESPACE || namespace === LOCALE_NAMESPACE) snapshot = undefined;
+		});
+		const reader = (): Reader => {
+			const service = promptCtx.get("settings") as HostSettings | undefined;
+			if (!service || typeof service.describe !== "function") return settingsReader(NO_SECTIONS);
+			const now = Date.now();
+			if (snapshot?.service === service && now >= snapshot.takenAt && now - snapshot.takenAt < SETTINGS_TTL_MS) {
+				return settingsReader(snapshot.sections);
+			}
+			const sections = collect(service);
+			snapshot = sections === undefined ? undefined : { service, takenAt: now, sections };
+			return settingsReader(sections ?? NO_SECTIONS);
+		};
 
 		// The text thunk is re-evaluated per assembly, so the section always
 		// reflects the newest setting without re-registering anything.
@@ -391,7 +371,7 @@ export function apply(ctx: HostContext): void {
 		 */
 		const rewrite = async (payload: PreStepPayload, next: () => Promise<PreStepDecision>) => {
 			const decision = await next();
-			if (decision.kind !== "enter" || payload.signal.aborted || payload.step !== 1) return decision;
+			if (decision.kind !== "enter" || payload.signal.aborted || payload.step !== 1 || decision.messages.length === 0) return decision;
 			const settings = currentSettings(reader());
 			const delay = reminderDelayMs(settings.reminderMinutes);
 			if (delay === REMINDER_OFF) return decision;
@@ -405,7 +385,7 @@ export function apply(ctx: HostContext): void {
 			// reminder off skips this whole listener, so both injections stop together.
 			// 收尾规则与提醒共用一个开关：提醒关闭时本段不执行，两处注入一起停。
 			const tail = settings.extraInjection ? tailText(settings.language) : "";
-			const messages = tail === "" ? decision.messages : prefixInjected(decision.messages, tail);
+			const messages = tail === "" ? decision.messages : withClosingReminder(decision.messages, tail);
 			return { ...decision, messages: [reminderMessage(head), ...messages] };
 		};
 

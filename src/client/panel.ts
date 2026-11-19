@@ -9,7 +9,7 @@
  * The row owns no state of its own: it reads the document, subscribes to it, and
  * writes the fields back. / 控件不持有自己的状态：读取文档、订阅变化、回写字段。
  */
-import { createElement as h, useEffect, useState } from "react";
+import { createElement as h, useEffect, useRef, useState } from "react";
 import {
 	AUTO,
 	CATALOGUE,
@@ -30,8 +30,7 @@ import type { Dict } from "./locales.js";
 export interface SettingsDoc {
 	getSnapshot(): { value?: unknown; revision?: number };
 	subscribe(listener: () => void): () => void;
-	set(field: string, value: unknown): unknown;
-	unset(field: string): unknown;
+	set(field: string, value: unknown): Promise<boolean>;
 }
 
 /** UI primitives this plugin can use when the host provides them. / 宿主提供时本插件可用的 UI 原语。 */
@@ -66,18 +65,41 @@ function readSettings(doc: SettingsDoc): ThinkingSettings {
 }
 
 /**
- * Write one field back, swallowing a refusal so a read-only host cannot break the UI.
- * 回写单个字段，并吞掉拒绝异常，使只读宿主不会让控件崩溃。
+ * Show the result of the latest write for a field.
+ * 显示该字段最近一次写入的结果。
  */
-function writeField(doc: SettingsDoc, field: string, value: unknown): void {
-	try {
-		const outcome = doc.set(field, value) as { then?: unknown } | null | undefined;
-		if (typeof outcome?.then === "function") {
-			void (outcome as Promise<unknown>).then(undefined, () => {});
+function useSettingWriter(doc: SettingsDoc, field: string) {
+	const [failed, setFailed] = useState(false);
+	const generation = useRef(0);
+	useEffect(() => {
+		setFailed(false);
+		return () => {
+			generation.current += 1;
+		};
+	}, [doc]);
+
+	async function save(value: unknown): Promise<void> {
+		const attempted = ++generation.current;
+		setFailed(false);
+		let accepted = false;
+		try {
+			accepted = await doc.set(field, value);
+		} catch {
+			// A transport failure leaves the last confirmed setting in the form.
+			// 传输失败后，表单仍显示上一次已确认的设置。
 		}
-	} catch {
-		/* a read-only settings document is not an error worth surfacing here */
+		if (attempted === generation.current) setFailed(!accepted);
 	}
+	return { failed, save };
+}
+
+function pickerWithError(control: unknown, failed: boolean, t: Binding["t"]): unknown {
+	return h(
+		"div",
+		{ className: "dsh_desk_lang_field" },
+		control,
+		failed ? h("div", { className: "dsh_desk_lang_desc", role: "alert" }, t("saveError")) : null
+	);
 }
 
 /** Subscribe one component to the document and re-read it on every revision. / 订阅设置文档，并在每次修订时重新读取。 */
@@ -105,6 +127,7 @@ function createLanguagePicker(primitives: UiPrimitives | undefined) {
 	return function LanguagePicker(props: Binding & { settings: ThinkingSettings }): unknown {
 		const { doc, t, settings } = props;
 		const [open, setOpen] = useState<boolean>(false);
+		const { failed, save } = useSettingWriter(doc, FIELD_LANGUAGE);
 		const items = [
 			{ id: AUTO, label: t("autoLabel") },
 			...CATALOGUE.map((language) => ({ id: language.tag, label: language.nativeName }))
@@ -113,7 +136,7 @@ function createLanguagePicker(primitives: UiPrimitives | undefined) {
 			settings.language === AUTO ? t("autoLabel") : nativeNameFor(settings.language) ?? settings.language;
 		const close = (): void => setOpen(false);
 		const choose = (id: string): void => {
-			writeField(doc, FIELD_LANGUAGE, id);
+			void save(id);
 			close();
 		};
 		const picker = h(
@@ -128,17 +151,19 @@ function createLanguagePicker(primitives: UiPrimitives | undefined) {
 			activeLabel,
 			Chevron === undefined ? null : h(Chevron, { className: "dsh_desk_lang_chevron" })
 		);
-		if (!Menu) return picker;
-		return h(Menu, {
-			open,
-			anchor: picker,
-			items,
-			selectedId: settings.language,
-			align: "end",
-			portal: true,
-			onClose: close,
-			onSelect: choose
-		});
+		const control = Menu
+			? h(Menu, {
+					open,
+					anchor: picker,
+					items,
+					selectedId: settings.language,
+					align: "end",
+					portal: true,
+					onClose: close,
+					onSelect: choose
+				})
+			: picker;
+		return pickerWithError(control, failed, t);
 	};
 }
 
@@ -168,26 +193,18 @@ function createReminderPicker(primitives: UiPrimitives | undefined) {
 
 	return function ReminderPicker(props: Binding & { settings: ThinkingSettings }): unknown {
 		const { doc, t, settings } = props;
-		const derived = derivedPreset(settings.reminderMinutes);
-		const current = settings.reminderMinutes > 0 ? settings.reminderMinutes : 30;
-		const [selected, setSelected] = useState<string>(derived);
+		const minutes = settings.reminderMinutes;
+		const selected = derivedPreset(minutes);
+		const current = minutes > 0 ? minutes : DEFAULTS.reminderMinutes;
+		const [editingCustom, setEditingCustom] = useState(false);
 		const [open, setOpen] = useState<boolean>(false);
 		const [draft, setDraft] = useState<string>(String(current));
+		const { failed, save } = useSettingWriter(doc, FIELD_REMINDER);
 
-		// An external change (the other surface, or a re-read) wins over a local
-		// selection; a local "custom" survives because it leaves `derived` alone.
-		// 外部改动（另一入口或重新读取）优先于本地选择；本地的「自定义」不会改变
-		// `derived`，因此能保持选中。
-		useEffect(() => {
-			setSelected(derived);
-		}, [derived]);
-
-		// Keep the input in step with the stored value, so an accepted edit never
-		// falls back to the previous number while the document update lands.
-		// 让输入框跟随存储值，避免写入落盘前先闪回上一个数字。
 		useEffect(() => {
 			setDraft(String(current));
-		}, [current]);
+			setEditingCustom(false);
+		}, [current, doc, minutes]);
 
 		const labelOf = (id: string): string => {
 			if (id === "off") return t("reminderOff");
@@ -203,21 +220,23 @@ function createReminderPicker(primitives: UiPrimitives | undefined) {
 
 		const choose = (id: string): void => {
 			setOpen(false);
-			setSelected(id);
-			if (id === "off") writeField(doc, FIELD_REMINDER, REMINDER_OFF);
-			else if (id === "turn") writeField(doc, FIELD_REMINDER, REMINDER_EVERY_TURN);
-			else if (id !== "custom") writeField(doc, FIELD_REMINDER, Number(id));
+			setDraft(String(current));
+			setEditingCustom(id === "custom");
+			if (id === "custom") return;
+			const value = id === "off" ? REMINDER_OFF : id === "turn" ? REMINDER_EVERY_TURN : Number(id);
+			void save(value);
 		};
 
 		const commit = (): void => {
-			const minutes = Math.round(Number(draft));
-			if (!Number.isFinite(minutes) || draft.trim() === "") {
+			const parsed = Math.round(Number(draft));
+			if (!Number.isFinite(parsed) || draft.trim() === "") {
 				setDraft(String(current));
 				return;
 			}
-			const clamped = Math.min(MAX_REMINDER_MINUTES, Math.max(1, minutes));
-			writeField(doc, FIELD_REMINDER, clamped);
+			const clamped = Math.min(MAX_REMINDER_MINUTES, Math.max(1, parsed));
 			setDraft(String(clamped));
+			if (clamped === minutes) setEditingCustom(false);
+			void save(clamped);
 		};
 
 		const picker = h(
@@ -246,8 +265,8 @@ function createReminderPicker(primitives: UiPrimitives | undefined) {
 				})
 			: picker;
 
-		if (selected !== "custom") return control;
-		return h(
+		if (!editingCustom && selected !== "custom") return pickerWithError(control, failed, t);
+		const editor = h(
 			"div",
 			{ className: "dsh_desk_lang_control" },
 			control,
@@ -256,16 +275,21 @@ function createReminderPicker(primitives: UiPrimitives | undefined) {
 				className: "dsh_desk_lang_input",
 				min: 1,
 				max: MAX_REMINDER_MINUTES,
-				placeholder: String(settings.reminderMinutes > 0 ? settings.reminderMinutes : 30),
+				"aria-label": t("reminderHeading"),
+				placeholder: String(current),
 				value: draft,
 				onChange: (event: { currentTarget: { value: string } }): void => setDraft(event.currentTarget.value),
 				onBlur: commit,
-				onKeyDown: (event: { key: string }): void => {
-					if (event.key === "Enter") commit();
+				onKeyDown: (event: { key: string; currentTarget: HTMLInputElement; preventDefault(): void }): void => {
+					if (event.key === "Enter") {
+						event.preventDefault();
+						event.currentTarget.blur();
+					}
 				}
 			}),
 			h("span", { className: "dsh_desk_lang_hint" }, t("reminderCustomHint"))
 		);
+		return pickerWithError(editor, failed, t);
 	};
 }
 
@@ -286,13 +310,14 @@ function createExtraPicker(primitives: UiPrimitives | undefined) {
 	return function ExtraPicker(props: Binding & { settings: ThinkingSettings; disabled?: boolean }): unknown {
 		const { doc, t, settings, disabled = false } = props;
 		const [open, setOpen] = useState<boolean>(false);
+		const { failed, save } = useSettingWriter(doc, FIELD_EXTRA);
 		const items = [
 			{ id: "on", label: t("extraOn") },
 			{ id: "off", label: t("extraOff") }
 		];
 		const close = (): void => setOpen(false);
 		const choose = (id: string): void => {
-			writeField(doc, FIELD_EXTRA, id === "on");
+			if (!disabled) void save(id === "on");
 			close();
 		};
 		const picker = h(
@@ -308,17 +333,19 @@ function createExtraPicker(primitives: UiPrimitives | undefined) {
 			settings.extraInjection ? t("extraOn") : t("extraOff"),
 			Chevron === undefined ? null : h(Chevron, { className: "dsh_desk_lang_chevron" })
 		);
-		if (!Menu) return picker;
-		return h(Menu, {
-			open,
-			anchor: picker,
-			items,
-			selectedId: settings.extraInjection ? "on" : "off",
-			align: "end",
-			portal: true,
-			onClose: close,
-			onSelect: choose
-		});
+		const control = Menu
+			? h(Menu, {
+					open: open && !disabled,
+					anchor: picker,
+					items,
+					selectedId: settings.extraInjection ? "on" : "off",
+					align: "end",
+					portal: true,
+					onClose: close,
+					onSelect: choose
+				})
+			: picker;
+		return pickerWithError(control, failed, t);
 	};
 }
 
@@ -409,9 +436,9 @@ export function createConfigCard(primitives: UiPrimitives | undefined): (props: 
 // packages/client/ui-chat/src/client/settings/PreferenceRow.module.css, MIT,
 // Copyright (c) 2026 DeepSeek — because that is the row this one sits beside.
 // Class names differ (the host's are CSS-Modules hashes) and the picker carries a
-// trailing `flex:none` the host does not need; every other character matches.
+// trailing `flex:none` the host does not need. The form adds styles for its own controls.
 // 声明顺序逐字照宿主自己的 PreferenceRow——因为那就是本行紧邻的邻居。类名不同，
-// 选择器末尾多一个宿主不需要的 `flex:none`；除此之外逐字符一致。
+// 选择器末尾多一个宿主不需要的 `flex:none`。表单还定义了自身控件的样式。
 const rowCss = [
 	".dsh_desk_lang_row{border-bottom:.5px solid var(--dsw-alias-border-l2);align-items:center;gap:8px;padding:16px 0;display:flex}",
 	".dsh_desk_lang_row_disabled{opacity:.45;pointer-events:none}",
@@ -421,6 +448,7 @@ const rowCss = [
 	".dsh_desk_lang_picker{border-radius:var(--dsw-radius-md);background:var(--dsw-alias-bg-module-platform);height:36px;font:inherit;color:var(--dsw-alias-label-primary);cursor:pointer;border:none;align-items:center;gap:12px;padding:0 14px;font-size:14px;line-height:22px;display:inline-flex;flex:none}",
 	".dsh_desk_lang_picker:hover{background:var(--dsw-alias-interactive-bg-hover)}",
 	".dsh_desk_lang_chevron{flex:none}",
+	".dsh_desk_lang_field{display:flex;flex-direction:column;align-items:flex-end;gap:4px}",
 	".dsh_desk_lang_control{align-items:center;gap:8px;display:flex;flex:none}",
 	".dsh_desk_lang_input{border-radius:var(--dsw-radius-md);background:var(--dsw-alias-bg-module-platform);height:36px;width:88px;font:inherit;color:var(--dsw-alias-label-primary);border:none;padding:0 12px;font-size:14px}",
 	".dsh_desk_lang_hint{color:var(--dsw-alias-label-tertiary);font-size:12px;white-space:nowrap}"

@@ -37,6 +37,8 @@ export interface Dict {
 	extraOn: string;
 	/** Label of the disabled option. / 关闭选项的标签。 */
 	extraOff: string;
+	/** Message shown when a write fails. / 写入失败时显示的提示。 */
+	saveError: string;
 }
 
 /** Simplified Chinese copy. / 简体中文文案。 */
@@ -52,9 +54,10 @@ export const zh: Dict = {
 	reminderUnit: "分钟",
 	reminderCustomHint: "1–1440 分钟",
 	extraHeading: "额外提醒注入",
-	extraDescription: "开启后把提醒同时并入技能目录；提醒间隔为「关闭」时，此项也一并关闭。",
+	extraDescription: "把额外提醒放进本轮技能目录，没有新目录时独立发送。提醒间隔为「关闭」时停用。",
 	extraOn: "开启",
-	extraOff: "关闭"
+	extraOff: "关闭",
+	saveError: "设置未能保存，请重试。"
 };
 
 /** English copy. / 英文文案。 */
@@ -72,9 +75,10 @@ export const en: Dict = {
 	reminderCustomHint: "1–1440 minutes",
 	extraHeading: "Extra reminder injection",
 	extraDescription:
-		"Also folds the reminder into the skill catalogue. Switching the reminder interval off turns this off too.",
+		"Adds a reminder to the skill catalogue, or sends it separately if no catalogue is sent. Turning reminders off also turns this off.",
 	extraOn: "On",
-	extraOff: "Off"
+	extraOff: "Off",
+	saveError: "Could not save this setting. Try again."
 };
 
 /** Dictionaries keyed by UI locale, handed to the host locale service. / 以界面语言为键、交给宿主 locale 服务的字典。 */

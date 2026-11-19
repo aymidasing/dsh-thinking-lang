@@ -220,8 +220,8 @@ function candidatesOf(locale: Intl.Locale): string[] {
  * 手写地区对照表。
  */
 function chineseTag(locale: Intl.Locale): string {
-	const maximized = typeof locale.maximize === "function" ? locale.maximize() : undefined;
-	return maximized?.script === "Hant" ? CHINESE.traditional : CHINESE.simplified;
+	const script = locale.script ?? locale.maximize().script;
+	return script === "Hant" ? CHINESE.traditional : CHINESE.simplified;
 }
 
 /**
@@ -231,11 +231,12 @@ function chineseTag(locale: Intl.Locale): string {
 function tagForLocale(raw: unknown): string | undefined {
 	const locale = parseLocale(raw);
 	if (locale === undefined) return undefined;
+	if (locale.language === "zh") return chineseTag(locale);
 	for (const candidate of candidatesOf(locale)) {
 		const match = BY_TAG.get(candidate.toLowerCase());
 		if (match !== undefined) return match.tag;
 	}
-	return locale.language === "zh" ? chineseTag(locale) : undefined;
+	return undefined;
 }
 
 /**
@@ -246,9 +247,8 @@ function tagForLocale(raw: unknown): string | undefined {
 function normalizeReminder(raw: unknown): number {
 	const numeric = typeof raw === "number" ? raw : typeof raw === "string" && raw.trim() !== "" ? Number(raw) : NaN;
 	if (!Number.isFinite(numeric)) return DEFAULT_REMINDER_MINUTES;
-	const rounded = Math.round(numeric);
-	if (rounded < 0) return REMINDER_OFF;
-	return rounded > MAX_REMINDER_MINUTES ? MAX_REMINDER_MINUTES : rounded;
+	if (numeric < 0) return REMINDER_OFF;
+	return Math.max(REMINDER_EVERY_TURN, Math.min(MAX_REMINDER_MINUTES, Math.round(numeric)));
 }
 
 /** Coerce one untrusted extra-injection value; only an explicit false turns it off. / 把不可信的额外注入值收敛为布尔；只有明确的 false 视为关闭。 */

@@ -12,7 +12,7 @@
 |---|---|---|
 | 由谁生成 | [`sectionText`](src/core.ts) | [`reminderText`](src/core.ts) |
 | 内容 | 完整规则句 | 一句短提醒 |
-| 注入形态 | 系统提示词的一段 | 一条 user 消息，追加在请求末尾 |
+| 注入形态 | 系统提示词的一段 | 批次开头的一条插件消息，可在技能目录或批次末尾加一条额外提醒 |
 | 频率 | 每会话组装一次（文本变化时提交） | 每轮第一步，且距上次 ≥ 提醒间隔（默认 30 分钟） |
 | 顺序 | `order: 1`，紧跟 persona | `prepend` 注册，晚于其它 pre-step 注入 |
 
@@ -28,7 +28,7 @@
 
 改文本改 `CATALOGUE`，再 `npm run build`。
 
-section 的 `order: 1` 紧跟 persona。提醒分两处：一条独立消息插在批次最前，另一条折进 `skill-catalog` 块的 `content` 首部。`agent/pre-step` 监听器在 `agent/created` 时重新 `prepend`，所以它排在监听链最外层，能看到其余注入追加完再动手。
+section 的 `order: 1` 紧跟 persona。前置提醒作为一条插件消息插在批次最前。`agent/pre-step` 监听器在 `agent/created` 时重新 `prepend`，从而在其他监听器追加消息后处理完整批次。
 
 ### 提醒间隔
 
@@ -44,7 +44,7 @@ section 的 `order: 1` 紧跟 persona。提醒分两处：一条独立消息插�
 
 ### 额外提醒注入
 
-存储字段是 `extraInjection`（布尔，默认 `true`）。开启时把 `skill-catalog` 块的 `content[0]` 换成「下文请使用简体中文思考」（按所选语言书写），模型因此在那段上下文里先读到规则、再读技能列表。
+存储字段是 `extraInjection`（布尔，默认 `true`）。如果本批次包含 `skill-catalog`，插件把额外提醒加到目录正文之前。如果目录缺席，插件在批次末尾追加一条独立消息，并在会话日志中标记为插件来源。
 
 它跟着提醒间隔联动：`reminderMinutes` 为负数时，整个 `agent/pre-step` 监听器提前返回，两处注入一起停；客户端对应地把这一行置灰。
 
@@ -86,7 +86,7 @@ DeepSeek 的上下文缓存自动生效、无需改代码，但它**只认从第
 - **支持 in-history 的模型**（DeepSeek 官方模型声明 `systemPromptUpdate: 'in-history'`）：新 system prompt 作为一条消息追加到历史尾部，旧前缀仍可命中；
 - **其它模型**：宿主替换开头那条 system message，从那里往后的 Token 全部重算。
 
-reminder 每轮追加在请求末尾，只新增尾部 Token，不会让已有前缀失效。
+提醒随当前步的新消息批次追加，因此此前请求已有的前缀仍可复用。
 
 差价是 **50 倍**（`deepseek-flash` 空闲时段：命中 0.02 元 / 百万 token，未命中 1 元 / 百万 token；高峰时段同样 50 倍。见[模型 & 价格](https://api-docs.deepseek.com/zh-cn/quick_start/pricing/)）。切换的代价仍是一次性的，从下一轮起恢复命中。
 
@@ -160,7 +160,7 @@ dsh plugin --profile desktop add "$PWD"
 
 标签先被清洗成 BCP-47（`_`→`-`，去掉 `.UTF-8`、`@latin` 这类 POSIX 修饰），再交给平台自带的 `Intl.Locale` 拆成语言／文字／地区三段，**不手写标签文法**。查找从最具体到最一般：完整标签 → 带文字的 → 带地区的 → 裸主标签，所以 `en-GB` 会落到 `en`。
 
-中文是唯一的例外——两个条目共用 `zh` 这个主标签，决定简繁的是**文字**而不是地区。这部分交给 CLDR：`maximize()` 会把短标签省略的文字补出来，`Hant` 判为繁體、其余判为简体。于是 `zh-TW`/`zh-HK`/`zh-MO`/`zh-Hant` 都是繁體，`zh`/`zh-SG`/`zh-Hans` 都是简体，两张对照表都不需要。
+中文优先使用显式文字标签，只有标签省略文字时才调用 `maximize()` 根据 CLDR 数据推断。`Hant` 判为繁体，其余判为简体。`zh-Hant-CN`、`zh-TW`、`zh-HK` 和 `zh-MO` 会得到繁体，`zh-Hans-TW`、`zh` 和 `zh-SG` 会得到简体。
 
 ---
 
@@ -174,4 +174,3 @@ dsh plugin --profile desktop add "$PWD"
 - **`auto` 依赖运行时能报出系统语言**：Linux/macOS 走环境变量，Windows 走 `Intl`。两者都拿不到时会静默落到界面语言，再不行才是 `zh-CN`。
 - **插件 id 与设置命名空间**：两者都是 `ay-dsh-tk-lang`，占的是一套自有命名；包名 `dsh-thinking-lang` 与 `dsh-thinking-language` 这类仍然相似，注意区分。功能重复的插件同时装上时，设置页会各插一行、各自注入提示词。
 - **注入只提高概率，不保证结果**：用户消息首行不是所选语言（英文开场、纯图片或附件）时，实测约 30%（仅前置提醒）/ 70%（含额外注入）按所选语言思考。需要稳定拿到目标语言的思考内容，请改用官方思考过程翻译插件。
-- **额外注入依赖 `skill-catalog` 块**：会话里没有技能目录时，规则改插在最后一条注入消息的 `content` 首部，位置与效果都可能不同。
