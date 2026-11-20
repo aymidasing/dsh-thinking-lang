@@ -56,21 +56,21 @@ export const CATALOGUE: readonly Language[] = [
 	{
 		tag: "zh-CN",
 		nativeName: "简体中文",
-		section: "推理规则：思考、推理与规划一律使用简体中文。回复用户时使用用户所用的语言。",
+		section: "推理规则：思考、推理与规划一律使用简体中文。",
 		reminder: "注意：思考、推理与规划用简体中文，即使上文不是",
 		tail: "下文请使用简体中文思考"
 	},
 	{
 		tag: "zh-TW",
 		nativeName: "繁體中文",
-		section: "推理規則：思考、推理與規劃一律使用繁體中文。回覆使用者時使用使用者所用的語言。",
+		section: "推理規則：思考、推理與規劃一律使用繁體中文。",
 		reminder: "注意：思考、推理與規劃用繁體中文，即使上文不是",
 		tail: "下文請使用繁體中文思考"
 	},
 	{
 		tag: "en",
 		nativeName: "English",
-		section: "Reasoning rules: think, reason, and plan in English. Reply to the user in the language they use.",
+		section: "Reasoning rules: think, reason, and plan in English.",
 		reminder: "Note: think, reason, and plan in English, even if the text above is not",
 		tail: "Think in English from here on"
 	}

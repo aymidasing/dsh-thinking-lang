@@ -22,9 +22,9 @@
 
 | 语言 | section（规则句） | reminder（批次开头） | tail（请求末尾） |
 |---|---|---|---|
-| 简体中文 | 推理规则：思考、推理与规划一律使用简体中文。回复用户时使用用户所用的语言。 | 注意：思考、推理与规划用简体中文，即使上文不是 | 下文请使用简体中文思考 |
-| 繁體中文 | 推理規則：思考、推理與規劃一律使用繁體中文。回覆使用者時使用使用者所用的語言。 | 注意：思考、推理與規劃用繁體中文，即使上文不是 | 下文請使用繁體中文思考 |
-| English | Reasoning rules: think, reason, and plan in English. Reply to the user in the language they use. | Note: think, reason, and plan in English, even if the text above is not | Think in English from here on |
+| 简体中文 | 推理规则：思考、推理与规划一律使用简体中文。 | 注意：思考、推理与规划用简体中文，即使上文不是 | 下文请使用简体中文思考 |
+| 繁體中文 | 推理規則：思考、推理與規劃一律使用繁體中文。 | 注意：思考、推理與規劃用繁體中文，即使上文不是 | 下文請使用繁體中文思考 |
+| English | Reasoning rules: think, reason, and plan in English. | Note: think, reason, and plan in English, even if the text above is not | Think in English from here on |
 
 改文本改 `CATALOGUE`，再 `npm run build`。
 
@@ -56,9 +56,9 @@ section 的 `order: 1` 紧跟 persona。前置提醒作为一条插件消息插�
 
 | 语言 | section（每会话一次） | 前置提醒（每提醒轮次） | 额外提醒（每提醒轮次） |
 |---|---|---|---|
-| 简体中文 | 21 | 14 | 6 |
-| 繁體中文 | 22 | 14 | 6 |
-| English | 23 | 18 | 6 |
+| 简体中文 | 13 | 14 | 6 |
+| 繁體中文 | 13 | 14 | 6 |
+| English | 13 | 18 | 6 |
 
 前置提醒是一条独立的用户消息，额外提醒只改 `skill-catalog` 的 `content[0]`、不新增消息，所以后者便宜。按默认 30 分钟间隔、100 轮算，一个会话约 50 次提醒、合计约 1000–1300 token。**换语言对每轮开销几乎没有影响**。
 

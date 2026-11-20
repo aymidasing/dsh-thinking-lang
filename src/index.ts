@@ -317,8 +317,12 @@ function prefixPrompt(message: Record<string, unknown>, text: string): Record<st
 }
 
 /**
- * Attach the rule to this batch's skill catalogue, or append a plugin-owned message.
- * 把规则加到当前批次的技能目录，或追加一条标记为本插件来源的消息。
+ * Attach the rule to this batch's skill catalogue, or append a plugin-owned message last.
+ * 把规则加到当前批次的技能目录；没有目录时在批次末尾追加一条本插件来源的消息。
+ *
+ * The fallback lands after every other injected message, so the closing rule stays
+ * the last thing the model reads even when no catalogue was sent.
+ * 回退的那条落在全部注入消息之后，因此没有技能目录时，收尾规则仍是模型最后读到的一句。
  */
 function withClosingReminder(messages: Array<Record<string, unknown>>, text: string): Array<Record<string, unknown>> {
 	const index = messages.findIndex((message) => asSection(message.source)?.kind === "skill-catalog");
